@@ -172,7 +172,7 @@ def take_spectra(instrument_instance, path_to_file, mode, action, it_vnir, it_sw
 
     except Exception as e:
         print(f"Error : {e}")
-        return e
+        raise e
 
     if gui:
         return it_vnir, it_swir, path_to_file

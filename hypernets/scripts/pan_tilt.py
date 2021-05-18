@@ -119,8 +119,9 @@ def move_to(ser, pan, tilt, wait=False, verbose=False): # FIXME : C901 # noqa
     print(f"offset_pan: {offset_pan}")
 
     # Orientation
-    pan -= offset_pan
-    tilt -= offset_tilt
+    # Flip tilt direction
+    pan += offset_pan
+    tilt = offset_tilt - tilt
 
     # Conversion FIXME : here modulo should fit pan/tilt range specification
     pan, tilt = int(pan*100) % 36000, int(tilt*100) % 36000
