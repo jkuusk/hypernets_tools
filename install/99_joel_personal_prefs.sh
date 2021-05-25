@@ -9,14 +9,24 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 ###### additional packages
-packman -Syu --noconfirm geeqie mlocate firefox
+pacman -Syu --noconfirm geeqie mlocate firefox yay vim binutils patch fakeroot make gcc
 runuser -u joel -- yay -S --noconfirm cutecom
+
+##### sshd config
+file=/etc/ssh/sshd_config
+cp -pf $file $file.old
+{ grep -v -e "X11Forwarding" -e "X11UseLocalhost" -e "ClientAliveInterval" -e "ClientAliveCountMax" -e "AcceptEnv" $file.old; 
+       echo -e "X11Forwarding yes\nX11UseLocalhost yes\nClientAliveInterval 300\nClientAliveCountMax 2\nAcceptEnv LANG LC_*\n"; } > $file
+
+###### services
+systemctl enable sshd.service
+systemctl start sshd.service
 
 ####### vim configuration
 cat > ~root/.vimrc << EOF
 " load default config
 unlet! skip_defaults_vim
-source $VIMRUNTIME/defaults.vim
+source \$VIMRUNTIME/defaults.vim
 
 " disable mouse
 set mouse=

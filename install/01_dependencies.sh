@@ -30,6 +30,8 @@ sudo -u $user git submodule init
 sudo -u $user git submodule update 
 
 cd hypernets/scripts/libhypstar/
+git checkout main
+git pull
 sudo -u $user make lib
 sudo make install
 cd -
