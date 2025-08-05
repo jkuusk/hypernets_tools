@@ -282,7 +282,7 @@ def open_serial():
         pantilt_port = config["pantilt"]["pantilt_port"]
 
     except KeyError as key:
-        warning(f" {key} default values loaded ({pantilt_port}.")
+        warning(f" {key} default values loaded ({pantilt_port}).")
 
     except Exception as e:
         error(f"Config Error: {e}.")
@@ -319,9 +319,6 @@ if __name__ == '__main__':
 
     parser = ArgumentParser()
 
-    # TODO add only request pan or tilt
-    # mode = parser.add_mutually_exclusive_group(required=True)
-
     parser.add_argument("-p", "--pan", type=restricted_float,
                         help="set pan (azimuth angle in degrees)",
                         metavar="{0..360}")
@@ -345,6 +342,26 @@ if __name__ == '__main__':
     if args.verbose:
         basicConfig(level=DEBUG, format=log_fmt, datefmt=dt_fmt) # noqa
 
+    tilt_limiter = True
+    try:
+        from configparser import ConfigParser
+        config = ConfigParser()
+        config.read("config_static.ini")
+        config_value = config["pantilt"]["tilt_limiter"]
+        if config_value == "no":
+            tilt_limiter = False
+            debug("tilt_limiter = no in config_static.ini")
+        else:
+            tilt_limiter = True
+            debug("tilt_limiter = yes because not explicitly disabled in config_static.ini")
+
+    except KeyError as key:
+        tilt_limiter = False
+        debug("pantilt/tilt_limiter not found in config_static.ini, defaults to tilt_limiter = no")
+
+    except Exception as e:
+        error(f"Config Error: {e}.")
+
     # FIXME
     ser = open_serial()
 
@@ -352,7 +369,7 @@ if __name__ == '__main__':
         print_position(ser)
     else:
         try:
-            print(move_to(ser, args.pan, args.tilt, wait=args.wait))
+            print(move_to(ser, args.pan, args.tilt, wait=args.wait, tilt_limiter=tilt_limiter))
         except Exception as e:
             error(f"{e}")
   
