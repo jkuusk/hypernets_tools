@@ -3,7 +3,7 @@ from urllib.request import urlopen
 from time import sleep
 from datetime import datetime, timezone
 from threading import Thread, Event
-from logging import info, debug
+from logging import info, debug, error
 
 
 def lightsensor_thread(event, path):
@@ -11,30 +11,31 @@ def lightsensor_thread(event, path):
     get = "/".join(["api", "lightSensor", "currentValue"])
     url = "/".join([url_base, get])
 
-    with open(path, "w") as monitor_pd:
-        # write header
-        seq = path.split("/")[-2]
-        seq = seq.replace("CUR", "")
-        monitor_pd.write(f"# monitor photodiode signal for sequence {seq}\n")
-        monitor_pd.write(f"# timestamp\tlx\n")
+    try:
+        with open(path, "w") as monitor_pd:
+            # write header
+            seq = path.split("/")[-2]
+            seq = seq.replace("CUR", "")
+            monitor_pd.write(f"# monitor photodiode signal for sequence {seq}\n")
+            monitor_pd.write(f"# timestamp\tlx\n")
 
-        try:
             # record to file until event is set
             while 1:
                 light = float(urlopen(url).read())
                 now_str = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
                 monitor_pd.write(f"{now_str}\t{light}\n")
                 monitor_pd.flush()
-                
+
                 # calling thread requested to stop
                 if event.is_set():
                     break
 
                 # log once per second
                 sleep(1)
-        
-        except Exception as e:
-            monitor_pd.write(e)
+
+    except Exception as e:
+        error(f"Failed to save monitor PD signal in {path}")
+        error(f"{e}")
 
 
 def start_lightsensor_thread(path):
