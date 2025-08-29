@@ -848,7 +848,11 @@ schedule() (
 
 
 			offset=$(YWakeUpSchedule -f '[result]' -r 127.0.0.1 "$yoctowifibrd".wakeUpSchedule"$n_sched" get_secondsBefore)
-			echo -e "Offset:\t\t$offset s"
+			if [[ "$offset" == "-1" ]]; then
+				echo -e "Offset:\t\tnot supported"
+			else
+				echo -e "Offset:\t\t$offset s"
+			fi
 
 			## calculate SZA
 			if [[ "$first_h" != "" ]]; then

@@ -399,7 +399,12 @@ log_schedule(){
 		log_debug "$out"
 
 		offset=$(YWakeUpSchedule -f '[result]' -r 127.0.0.1 "$yoctoPrefix".wakeUpSchedule"$n_sched" get_secondsBefore)
-		log_debug "Offset:   $offset s"
+		if [[ "$offset" == "-1" ]]; then
+			log_debug "Offset:   not supported"
+		else
+			log_debug "Offset:   $offset s"
+		fi
+
 	done # n_sched in 1 2 3
 } # log_schedule()
 
