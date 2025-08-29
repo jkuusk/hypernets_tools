@@ -315,6 +315,95 @@ debug_yocto(){
     # ------------------------------------------------------------------------------
 }
 
+
+log_schedule(){
+	## return if less than DEBUG log level
+	if [[ $numeric_verbosity -lt 4 ]]; then
+		return
+	fi
+
+	# check if Yocto command line API is installed
+	if [[ ! $(command -v YWakeUpSchedule) ]]; then
+		log_error "}Yocto API is not installed"
+		return
+	fi
+
+	## Log Yocto WDT
+	max_wakeup_time=$(YWakeUpMonitor -f '[result]' -r 127.0.0.1 "$yoctoPrefix".wakeUpMonitor get_powerDuration)
+
+	if [ "$max_wakeup_time" = 0 ]; then
+		log_debug "Yocto Auto-Power-Off is disabled"
+	else
+		log_debug "Yocto Auto-Power-Off is set to $max_wakeup_time s"
+	fi
+
+	## Log Yocto wake-up schedules
+	for n_sched in 1 2 3; do
+		## Yocto-Pictor-Wifi has only two schedules
+		if [[ ${is_yocto_pictor_wifi-} == 1 && $n_sched == 3 ]]; then
+			break
+		fi
+
+		log_debug "------------------- Schedule $n_sched -------------------"
+
+		months=$(YWakeUpSchedule -f '[result]' -r 127.0.0.1 "$yoctoPrefix".wakeUpSchedule"$n_sched" get_months)
+		log_debug "Months:   $months"
+
+		days=$(YWakeUpSchedule -f '[result]' -r 127.0.0.1 "$yoctoPrefix".wakeUpSchedule"$n_sched" get_monthDays)
+		out="Days:     "
+		if [[ "$days" =~ ^\[\.*\]$ ]]; then
+			out+="$days"
+		else
+			out+="["
+			for ((i = 0; i < 31; i++)); do
+			    if [[ "${days:i+1:1}" != "." ]]; then
+				    out+="$((i+1)) "
+				else
+				    out+=". "
+				fi
+			done
+			out="${out% }]"
+		fi
+		log_debug "$out"
+
+		weekdays=$(YWakeUpSchedule -f '[result]' -r 127.0.0.1 "$yoctoPrefix".wakeUpSchedule"$n_sched" get_weekDays)
+		log_debug "Weekdays: $weekdays"
+
+		hours=$(YWakeUpSchedule -f '[result]' -r 127.0.0.1 "$yoctoPrefix".wakeUpSchedule"$n_sched" get_hours)
+		out="Hours:    "
+		if [[ "$hours" =~ ^\[\.*\]$ ]]; then
+			out+="$hours"
+		else
+			out+="["
+			for ((i = 0; i < 24; i++)); do
+			    if [[ "${hours:i+1:1}" != "." ]]; then
+				    out+="$i "
+				else
+				    out+=". "
+				fi
+			done
+			out="${out% }]"
+		fi
+		log_debug "$out"
+
+		minutes_dec=$(YWakeUpSchedule -f '[result]' -r 127.0.0.1 "$yoctoPrefix".wakeUpSchedule"$n_sched" get_minutes)
+		minutes_bin=$(bc <<< "obase=2; $minutes_dec")
+		length=${#minutes_bin}
+		out="Minutes:  ["
+		for ((i = (($length - 1)), j=0; i >= 0; i--, j++)); do
+		    if [[ "${minutes_bin:i:1}" == "1" ]]; then
+			    out+="$j,"
+			fi
+		done
+		out="${out%,}]"
+		log_debug "$out"
+
+		offset=$(YWakeUpSchedule -f '[result]' -r 127.0.0.1 "$yoctoPrefix".wakeUpSchedule"$n_sched" get_secondsBefore)
+		log_debug "Offset:   $offset s"
+	done # n_sched in 1 2 3
+} # log_schedule()
+
+
 # log operating system release
 if [ -f /etc/os-release ]; then
 	source /etc/os-release
@@ -478,6 +567,8 @@ if [[ "$bypassYocto" != "yes" ]] ; then
 	# log supply voltage
 	voltage=$(python -m hypernets.yocto.voltage)
 	echo "[INFO]  Supply voltage: $voltage V"
+
+	log_schedule
 
 	# log wake up reason
 	set +e

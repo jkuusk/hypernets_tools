@@ -1,3 +1,9 @@
+Version 3.1.4: (2025-08-25)
+	- log also binary messages instead of [xxB blob data]
+	- optimise spectrum saving code and log scan count
+	- fix azimuth_switch comment in config_dynamic.ini template
+	- log Yocto WDT and schedules at debug level
+
 Version 3.1.3: (2025-08-25)
 	- tilt no-go zone bugfix also for pt command line tool if no-go zone 
 	  is disabled

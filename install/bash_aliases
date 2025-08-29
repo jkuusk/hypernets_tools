@@ -846,6 +846,10 @@ schedule() (
 			fi
 			echo "]"
 
+
+			offset=$(YWakeUpSchedule -f '[result]' -r 127.0.0.1 "$yoctowifibrd".wakeUpSchedule"$n_sched" get_secondsBefore)
+			echo -e "Offset:\t\t$offset s"
+
 			## calculate SZA
 			if [[ "$first_h" != "" ]]; then
 				tz_offset_h=$(printf "%+d" $(("$yocto_offset" / 3600)))
