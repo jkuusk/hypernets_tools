@@ -182,7 +182,7 @@ class HypstarHandler(Hypstar):
             spectra_bytes = bytearray()
             spec_it = [None, None]
             spec_count = [0, 0]
-            for spectrum in enumerate(cap_list):
+            for spectrum in cap_list:
                 b = spectrum.getBytes()
                 spectra_bytes.extend(b)
 
@@ -225,15 +225,9 @@ class HypstarHandler(Hypstar):
             sleep(1)
 
             spectra = self.VM_measure(request.entrance, request.radiometer, request.it_vnir, int(request.vm_current_ma)/1000, request.number_cap)
-            # spectra = self.VM_measure(request.entrance, ValidationModuleLightType.LIGHT_VIS, request.it_vnir, 1.0, scan_count=request.number_cap)
-
-            spectra_bytes = bytearray()
-            for spectrum in enumerate(spectra):
-                b = spectrum.getBytes()
-                spectra_bytes.extend(b)
 
             with open(path_to_file, "wb") as f:
-                f.write(spectra_bytes)
+                f.write(bytes(spectra))
 
             info(f"Saved to {path_to_file}.")
 
