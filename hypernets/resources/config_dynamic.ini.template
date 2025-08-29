@@ -143,7 +143,7 @@ pantilt_port = /dev/ttyS0
 # azimuth from sun.
 # Allowed values: integer or floating point in the range [0...360] or [-180...180]
 #
-# The switch from left (sun_az - rel_az) to right (sun_az + rel_az) is made
+# The switch from right (sun_az + rel_az) to left (sun_az - rel_az) is made
 # when sun_az has passed the azimuth_switch angle. The parameter works
 # similarly in both the Northern and Southern Hemispheres.
 azimuth_switch = 0
