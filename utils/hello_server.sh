@@ -149,7 +149,7 @@ make_log() {
 	systemctl is-enabled hypernets-$logName.service > /dev/null
 	if [[ $? -eq 0 ]] ; then
 		echo "[INFO]  Making log: $logNameBase-$logName"
-		journalctl -b-1 -u hypernets-$logName $extra_services --no-pager > LOGS/$YMFolder/$logNameBase-$logName.log
+		journalctl -b-1 -u hypernets-$logName $extra_services --no-pager --all > LOGS/$YMFolder/$logNameBase-$logName.log
 	else
 		echo "[INFO]  Skipping log: $logName"
 	fi

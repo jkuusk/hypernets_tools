@@ -179,30 +179,35 @@ class HypstarHandler(Hypstar):
                 return Exception("Cap list length is zero!")
 
             # Concatenation
-            spectra = b''
+            spectra_bytes = bytearray()
             spec_it = [None, None]
-            for n, spectrum in enumerate(cap_list):
-                spectra += spectrum.getBytes()
+            spec_count = [0, 0]
+            for spectrum in cap_list:
+                b = spectrum.getBytes()
+                spectra_bytes.extend(b)
 
                 debug(spectrum)
 
                 if spectrum.spectrum_header.spectrum_config.vnir:
                     spec_it[0] = spectrum.spectrum_header.integration_time_ms
+                    spec_count[0] += 1
                     if overwrite_IT:
                         request.it_vnir = \
                             spectrum.spectrum_header.integration_time_ms
                 elif spectrum.spectrum_header.spectrum_config.swir:
                     spec_it[1] = spectrum.spectrum_header.integration_time_ms
+                    spec_count[1] += 1
                     if overwrite_IT:
                         request.it_swir = \
                             spectrum.spectrum_header.integration_time_ms
 
-            # Log integration times
+            # Log integration times and spectra count
             info(f"Integration time: {spec_it}")
+            info(f"Scan count: {spec_count}")
 
             # Save
             with open(path_to_file, "wb") as f:
-                f.write(spectra)
+                f.write(spectra_bytes)
 
             info(f"Saved to {path_to_file}.")
 
@@ -220,14 +225,9 @@ class HypstarHandler(Hypstar):
             sleep(1)
 
             spectra = self.VM_measure(request.entrance, request.radiometer, request.it_vnir, int(request.vm_current_ma)/1000, request.number_cap)
-            # spectra = self.VM_measure(request.entrance, ValidationModuleLightType.LIGHT_VIS, request.it_vnir, 1.0, scan_count=request.number_cap)
-
-            spectra_bin = b''
-            for n, spectrum in enumerate(spectra):
-                spectra_bin += spectrum.getBytes()
 
             with open(path_to_file, "wb") as f:
-                f.write(spectra_bin)
+                f.write(bytes(spectra))
 
             info(f"Saved to {path_to_file}.")
 
