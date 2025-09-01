@@ -1,4 +1,4 @@
-Version 3.1.4: (2025-08-25)
+Version 3.1.4: (2025-09-01)
 	- log also binary messages instead of [xxB blob data]
 	- optimise spectrum saving code and log scan count
 	- fix azimuth_switch comment in config_dynamic.ini template
