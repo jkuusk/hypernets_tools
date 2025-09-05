@@ -128,17 +128,19 @@ fi
 shutdown_sequence() {
 	return_value="$1"
 
-    if [[ "$bypassYocto" != "yes" ]] && [[ "$startSequence" == "yes" ]] ; then
+    if [[ "$bypassYocto" != "yes" ]] ; then
 		# log supply voltage before switching off the relays
 		voltage=$(python -m hypernets.yocto.voltage)
 		echo "[INFO]  Supply voltage: $voltage V"
 
-	    log_info "Set relays #2 and #3 to OFF."
-	    python -m hypernets.yocto.relay -soff -n2 -n3
+		if [[ "$startSequence" == "yes" ]] ; then
+		    log_info "Set relays #2 and #3 to OFF."
+		    python -m hypernets.yocto.relay -soff -n2 -n3
 
-		if [[ "$checkRain" == "yes" ]]; then
-	    	log_info "Set relay #4 to OFF."
-		    python -m hypernets.yocto.relay -soff -n4
+			if [[ "$checkRain" == "yes" ]]; then
+				log_info "Set relay #4 to OFF."
+				python -m hypernets.yocto.relay -soff -n4
+			fi
 		fi
 
 		# Sync PC clock to yocto gps if more than 5 sec out of sync
@@ -159,15 +161,41 @@ shutdown_sequence() {
 				utc_offset=$(printf "%+d" $(("$yocto_offset" / 3600)))
 			fi
 
+			## Log Yocto schedules
 			if [ "$next_wakeup_timestamp" = 0 ]; then
 				log_warning "Yocto scheduled wakeup is disabled !!"
 			else
 				yocto_timestamp=$(date -d "$yocto_time UTC" -u +%s)
 				delta=$(( "$next_wakeup_timestamp" - "$yocto_timestamp" ))
 				log_info "Next Yocto wakeup is scheduled on $(date -d @$next_wakeup_timestamp '+%Y/%m/%d %H:%M:%S') UTC$utc_offset (in $delta s)"
+
+				## log next wakeup of all schedules at debug loglevel
+				for n_sched in 1 2 3; do
+					## Yocto-Pictor-Wifi has only two schedules
+					if [[ ${is_yocto_pictor_wifi-} == 1 && $n_sched == 3 ]]; then
+						break
+					fi
+
+					next_wakeup_timestamp=$(YWakeUpSchedule -f '[result]' -r 127.0.0.1 "$yoctoPrefix".wakeUpSchedule"$n_sched" get_nextOccurence | sed -e 's/[[:space:]].*//')
+					delta=$(( "$next_wakeup_timestamp" - "$yocto_timestamp" ))
+					if [ "$next_wakeup_timestamp" = 0 ]; then
+						log_debug "Next schedule $n_sched wakeup: disabled"
+					else
+						log_debug "Next schedule $n_sched wakeup: $(date -d @$next_wakeup_timestamp '+%Y/%m/%d %H:%M:%S') UTC$utc_offset (in $delta s)"
+					fi
+				done
+			fi ## Log Yocto schedules
+
+			## Log Yocto WDT
+			max_wakeup_time=$(YWakeUpMonitor -f '[result]' -r 127.0.0.1 "$yoctoPrefix".wakeUpMonitor get_powerDuration)
+
+			if [ "$max_wakeup_time" = 0 ]; then
+				log_debug "Yocto Auto-Power-Off is disabled"
+			else
+				log_debug "Yocto Auto-Power-Off is set to $max_wakeup_time s"
 			fi
 		fi # log next scheduled yocto wakeup if yocto command line API is installed
-    fi # [[ "$bypassYocto" != "yes" ]] && [[ "$startSequence" == "yes" ]]
+    fi # [[ "$bypassYocto" != "yes" ]]
 
 	# check minimum uptime
     if [[ "$keepPc" == "off" ]]; then
@@ -212,6 +240,9 @@ shutdown_sequence() {
 		log_info "Yoctosleep status : $yocto_sleep"
 
 		if [[ $yocto_sleep -eq 0 ]]; then
+			## make sure virtualhub has time to send the sleep command to yocto
+			sleep 1
+
 			# All OK, shuttig down
 			log_info "Shutting down"
 			exit 0
@@ -326,15 +357,6 @@ log_schedule(){
 	if [[ ! $(command -v YWakeUpSchedule) ]]; then
 		log_error "}Yocto API is not installed"
 		return
-	fi
-
-	## Log Yocto WDT
-	max_wakeup_time=$(YWakeUpMonitor -f '[result]' -r 127.0.0.1 "$yoctoPrefix".wakeUpMonitor get_powerDuration)
-
-	if [ "$max_wakeup_time" = 0 ]; then
-		log_debug "Yocto Auto-Power-Off is disabled"
-	else
-		log_debug "Yocto Auto-Power-Off is set to $max_wakeup_time s"
 	fi
 
 	## Log Yocto wake-up schedules
@@ -615,7 +637,7 @@ if [[ "$bypassYocto" != "yes" ]] ; then
         fi
 	fi # checkWakeUpReason
 
-	if [[ "$checkRain" == "yes" ]] ; then
+	if [[ "$checkRain" == "yes" ]] && [[ "$startSequence" == "yes" ]] ; then
 		log_info "Rain sensor check is enabled."
 		log_info "Set relay #4 to ON."
 		python -m hypernets.yocto.relay -son -n4

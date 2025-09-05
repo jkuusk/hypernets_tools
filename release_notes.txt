@@ -1,3 +1,15 @@
+Version 3.1.5: (2025-09-05)
+	- when creating logs check if any log exists, not only sequence log
+	- overwrite the hard link instead of erroring out if it already exists in ARCHIVE
+	- disable rain check if start_sequence = no
+	- print next wake-up time even if start_sequence = no
+	- log next wake-ups for all schedules at debug log level at the end of the
+	  sequence
+	- move logging Yocto WDT from beginning of sequence to just before
+	  shutdown
+	- add 1 second sleep between scheduling yocto sleep and exiting the
+	  sequence service
+
 Version 3.1.4: (2025-09-01)
 	- log also binary messages instead of [xxB blob data]
 	- optimise spectrum saving code and log scan count
