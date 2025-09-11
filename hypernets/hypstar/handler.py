@@ -80,7 +80,7 @@ class HypstarHandler(Hypstar):
                         sleep(5)
                     else:
                         error("MUX+SWIR+TEC hardware not available")
-                        exit(27)
+                        exit(37)
 
         except IOError as e:
             error(f"{e}")

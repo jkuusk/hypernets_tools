@@ -725,14 +725,18 @@ exit_actions() {
 		if [ $return_value -ne 30 ] && [ $return_value -ne 40 ] && \
 				[ $return_value -ne 88 ] && [ $return_value -ne 98 ]; then
 			sleep 1
+
 			## 6 - instrunent failed to init comms
+			## 37 - MUX and/or SWIR+TEC not available
 			## 78 - VM stabilisation failed
 			## power cycle, otherwise the second attempt fails as well
-			if [ $return_value -eq 6 ] || [ $return_value -eq 78 ]; then
+			if [ $return_value -eq 6 ] || [ $return_value -eq 37 ] || \
+					[ $return_value -eq 78 ]; then
 				echo "[INFO]  Power cycling the radiometer"
 				python -m hypernets.yocto.relay -soff -n3
 				sleep 10
 			fi
+
 			echo "[WARNING]  Second try : "
 			set +e
 			python3 -m hypernets.open_sequence -f $sequence_file $extra_args
@@ -741,6 +745,12 @@ exit_actions() {
 		        echo "[INFO]  Success on second attempt"
 		    else
 				echo "[WARNING]  Hysptar scheduled job on second attempt exited with code $return_value";
+
+				## 27 - Radiometer is not responding
+				## log yocto env sensors (RH inside host unit)
+				if [ $return_value -eq 27 ]; then
+					log_info "Yocto meteo: $(python -m hypernets.yocto.meteo | sed -E -e 's/\(|\)|\[|\]|\"//g' | sed -e "s/'//2g" | sed '-es/,//'{7..1..2})"
+				fi
 			fi
 			set -e
 		fi

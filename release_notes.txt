@@ -1,3 +1,10 @@
+Version 3.2.0: (2025-09-11)
+	- pt command attempts moving if reading current position fails and the
+	  movement request is not relative to current position
+	- change SWIR+TEC or MUX+SWIR+TEC missing exit code from 27 to 37
+	- log yocto env sensors if exit code is 27: radiometer is not responding
+	- power cycle for second attempt if exit code is 37: (MUX+)SWIR+TEC missing
+
 Version 3.1.5: (2025-09-05)
 	- when creating logs check if any log exists, not only sequence log
 	- overwrite the hard link instead of erroring out if it already exists in ARCHIVE
