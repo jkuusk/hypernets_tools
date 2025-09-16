@@ -712,12 +712,21 @@ EOF
 			new_hyper_tilt=$(printf "%.1f" $(bc <<< "(($new_abs_tilt) + ($offset_tilt) + 36000) % 360"))
 	
 			## calculate residuals
-			residual_pan=$(bc <<< "$new_abs_pan - $requested_abs_pan")
-			residual_tilt=$(bc <<< "$new_abs_tilt - $requested_abs_tilt")
+			if [[ "$new_pan"  =~ ^([xX])$ ]]; then
+				residual_pan="x"
+			else
+				residual_pan=$(printf "%.1f" "$(bc <<< "$new_abs_pan - $requested_abs_pan")")
+			fi
+
+			if [[ "$new_tilt"  =~ ^([xX])$ ]]; then
+				residual_tilt="x"
+			else
+				residual_tilt=$(printf "%.1f" "$(bc <<< "$new_abs_tilt - $requested_abs_tilt")")
+			fi
 	
 			echo
 			echo "New positions"
-			printf "abs:   pan = %.1f, tilt = %.1f, residuals: pan = %.1f, tilt = %.1f\n" "$new_abs_pan" "$new_abs_tilt" "$residual_pan" "$residual_tilt"
+			printf "abs:   pan = %.1f, tilt = %.1f, residuals: pan = %s, tilt = %s\n" "$new_abs_pan" "$new_abs_tilt" "$residual_pan" "$residual_tilt"
 			printf "hyper: pan = %.1f, tilt = %.1f\n" "$new_hyper_pan" "$new_hyper_tilt"
 		else
 			echo -e "\n${XHL}$output${RESET_HL}\n"

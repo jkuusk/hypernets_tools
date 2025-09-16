@@ -4,6 +4,7 @@ Version 3.2.0: (2025-09-11)
 	- change SWIR+TEC or MUX+SWIR+TEC missing exit code from 27 to 37
 	- log yocto env sensors if exit code is 27: radiometer is not responding
 	- power cycle for second attempt if exit code is 37: (MUX+)SWIR+TEC missing
+	- fix pt residual reporting for single axis movement
 
 Version 3.1.5: (2025-09-05)
 	- when creating logs check if any log exists, not only sequence log
