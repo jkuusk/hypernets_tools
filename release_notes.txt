@@ -7,6 +7,7 @@ Version 3.2.0: (2025-09-11)
 	- fix pt residual reporting for single axis movement
 	- log wake-up state if yocto lower board is not detected
 	- log peak current/voltage/power if 2nd gen yocto
+	- fix yocto debug and save the yocto logs to LOGS folder
 
 Version 3.1.5: (2025-09-05)
 	- when creating logs check if any log exists, not only sequence log

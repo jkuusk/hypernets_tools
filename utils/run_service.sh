@@ -238,11 +238,11 @@ shutdown_sequence() {
 	fi
 
 	if [[ "$keepPc" == "off" ]]; then
-	    log_info "Option : Keep PC OFF"
+		log_info "Option : Keep PC OFF"
 
-	    log_info "Send Yoctopuce To sleep (or not)"
+		log_info "Send Yoctopuce To sleep (or not)"
 		set +e
-	    python -m hypernets.yocto.sleep_monitor
+		python -m hypernets.yocto.sleep_monitor
 		yocto_sleep=$?
 		set -e
 
@@ -258,7 +258,7 @@ shutdown_sequence() {
 		fi
 
 		# Something went wrong
-	    # Cause service exit 1 and doesn't execute SuccessAction=poweroff
+		# Cause service exit 1 and doesn't execute SuccessAction=poweroff
 		if [[ $yocto_sleep -eq 1 ]]; then
 			log_error "Yocto unreachable !!"
 		elif [[ $yocto_sleep -eq 255 ]]; then
@@ -267,9 +267,9 @@ shutdown_sequence() {
 		fi
 
 		log_error "NOT shutting down !!"
-	    exit 1
+		exit 1
 	else
-	    log_info "Option : Keep PC ON"
+		log_info "Option : Keep PC ON"
 
 		# Test run
 		if [[ "${keepPcInConf-}" == "off" ]]; then
@@ -299,61 +299,61 @@ shutdown_sequence() {
 
 
 debug_yocto(){
-    # ------------------------------------------------------------------------------
-    # YOCTO DEBUG ------------------------------------------------------------------
-    # ------------------------------------------------------------------------------
-    echo "[DEBUG]  Check if Yocto-Pictor is in (pseudo) deep-sleep mode..."
-    set +e
-    yoctoState=$(wget -O- \
-        'http://127.0.0.1:4444/bySerial/$yoctoPrefix/api/wakeUpMonitor/wakeUpState' \
-        2> /dev/null)
+	log_debug "Check if Yocto-Pictor is in (pseudo) deep-sleep mode..."
 
-    if [[ ! $? -eq 0 ]] ; then
-        echo "[DEBUG]  Fail to get Yocto-Pictor wake-up state !"
-        return 1
-    fi
+	# check if Yocto command line API is installed
+	if [[ ! $(command -v YModule) ]]; then
+		log_error "Yocto API is not installed"
+		return 0
+	fi
 
-    echo "[DEBUG]  Yocto-Pictor wake-up state : $yoctoState"
+	yocto_wakeup_state=$(YWakeUpMonitor -f '[result]' -r 127.0.0.1 $yoctoPrefix get_wakeUpState)
 
-    if [[ $yoctoState == "SLEEPING" ]] ; then
-        echo "[DEBUG]  Awaking Yocto-Pictor..."
-        yoctoState=$(wget -O- \
-            'http://127.0.0.1:4444/bySerial/$yoctoPrefix/api/wakeUpMonitor?wakeUpState=1' \
-            2> /dev/null)
-                    if [[ ! $? -eq 0 ]] ; then
-                        echo "[DEBUG]  Fail to wake-up the Yocto-Pictor !"
-                        return 1
-                    fi
-                    sleep 2
-    fi
+	if [[ ! $? -eq 0 ]] ; then
+		log_error "Failed to get Yocto-Pictor wake-up state !"
+		return 0
+	fi
 
-    logNameBase=$(date +"%Y-%m-%d-%H%M")
+	log_debug "Yocto-Pictor wake-up state : $yocto_wakeup_state"
 
-    suffixeName=""
-    for i in {001..999}; do
-        if [ -f "OTHER/$logNameBase$suffixeName-log.txt" ] ||
-            [ -f "OTHER/$logNameBase$suffixeName-api.txt" ]; then
-                    echo "[DEBUG]  Error the log already exists! ($i)"
-                    suffixeName=$(echo "-$i")
-                else
-                    logNameBase=$(echo $logNameBase$suffixeName)
-                    break
-        fi
-    done
+	if [[ $yocto_wakeup_state == "SLEEPING" ]] ; then
+		log_info "Awaking Yocto-Pictor..."
+		YWakeUpMonitor -f '[result]' -r 127.0.0.1 $yoctoPrefix wakeUp > /dev/null
+		if [[ ! $? -eq 0 ]] ; then
+			log_error "Failed to wake up the Yocto-Pictor !"
+			return 0
+		fi
+		sleep 5
+	fi
 
-    echo "[DEBUG]  Getting LOGS.txt and API.txt (prefix: $logNameBase)..."
+	set +e
+	last_boot_timestamp=$(journalctl -b --output-fields=__REALTIME_TIMESTAMP -o export | grep -m 1 __REALTIME_TIMESTAMP | sed -e 's/.*=//')
+	set -e
 
-    wget -O- 'http://127.0.0.1:4444/bySerial/$yoctoPrefix/api.txt' > \
-        "OTHER/$logNameBase-api.txt" 2> /dev/null
+	## truncate microseconds
+	last_boot_timestamp=${last_boot_timestamp::-6}
 
-    wget -O- 'http://127.0.0.1:4444/bySerial/$yoctoPrefix/logs.txt' > \
-        "OTHER/$logNameBase-log.txt" 2> /dev/null
+	logNameBase=$(date +"%Y-%m-%d-%H%M" -d @$last_boot_timestamp)
+	YMFolder=$(date +"%Y/%m" -d @$last_boot_timestamp)
 
-    set -e
-    # ------------------------------------------------------------------------------
-    # \ YOCTO DEBUG ----------------------------------------------------------------
-    # ------------------------------------------------------------------------------
-}
+	## create LOG folder if it does not exist already
+	mkdir -p LOGS/$YMFolder/
+
+	suffixeName=""
+	for i in {001..999}; do
+		if [ -f "LOGS/$YMFolder/${logNameBase}${suffixeName}-yocto.log" ] || \
+		   [ -f "ARCHIVE/LOGS/$YMFolder/${logNameBase}${suffixeName}-yocto.log" ]; then
+			log_warning "Yocto log already exists! ($i)"
+			suffixeName="-$i"
+		else
+			logNameBase="${logNameBase}${suffixeName}"
+			break
+		fi
+	done
+
+	log_info "Saving Yocto debug info into LOGS/$YMFolder/${logNameBase}-yocto.log"
+	YModule -r 127.0.0.1 showDebugInformation > "LOGS/$YMFolder/${logNameBase}-yocto.log" 2>&1
+} # debug_yocto()
 
 
 log_schedule(){
@@ -364,7 +364,7 @@ log_schedule(){
 
 	# check if Yocto command line API is installed
 	if [[ ! $(command -v YWakeUpSchedule) ]]; then
-		log_error "}Yocto API is not installed"
+		log_error "Yocto API is not installed"
 		return 0
 	fi
 
@@ -448,7 +448,7 @@ log_supply(){
 
 	# check if Yocto command line API is installed
 	if [[ ! $(command -v YThreshold) ]]; then
-		log_error "}Yocto API is not installed"
+		log_error "Yocto API is not installed"
 		return 0
 	fi
 
