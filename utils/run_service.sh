@@ -303,7 +303,7 @@ debug_yocto(){
 
 	# check if Yocto command line API is installed
 	if [[ ! $(command -v YModule) ]]; then
-		log_error "Yocto API is not installed"
+		log_warning "Yocto API is not installed"
 		return 0
 	fi
 
@@ -364,7 +364,7 @@ log_schedule(){
 
 	# check if Yocto command line API is installed
 	if [[ ! $(command -v YWakeUpSchedule) ]]; then
-		log_error "Yocto API is not installed"
+		log_warning "Yocto API is not installed"
 		return 0
 	fi
 
@@ -448,7 +448,7 @@ log_supply(){
 
 	# check if Yocto command line API is installed
 	if [[ ! $(command -v YThreshold) ]]; then
-		log_error "Yocto API is not installed"
+		log_warning "Yocto API is not installed"
 		return 0
 	fi
 
@@ -525,24 +525,30 @@ if [[ "$bypassYocto" != "yes" ]] ; then
 
 	# Ensure Yocto is online
 	set +e
+	for path in /usr/bin/VirtualHub /usr/sbin/VirtualHub; do
+		if [ -x "$path" ]; then
+			virtualhub_path="$path"
+			break
+		fi
+	done
 	# check if VirtualHub is running
 	systemctl is-active yvirtualhub.service > /dev/null
 	if [[ $? -eq 0 ]] ; then
 		set -e
-		log_info "VirtualHub is running."
+		log_info "VirtualHub is running: $("$virtualhub_path" -v 2>&1)"
 	else
 		set -e
 		log_info "Starting VirtualHub..."
-        if [[ "$ID" == "manjaro" ]]; then
-		    /usr/bin/VirtualHub &
-        elif [[ "$ID" == "debian" ]]; then
-            /usr/sbin/VirtualHub &
-        else
-            log_error "Not able to identify the distribution."
-            exit 0
-        fi
+		"$virtualhub_path" &
 		sleep 2
 		log_info "ok"
+	fi
+
+	# log yocto API version
+	if [[ $(command -v YModule) ]]; then
+		log_info "Yocto command line API version: $(YModule -r 127.0.0.1 version | cut -d " " -f 4)"
+	else
+		log_warning "Yocto command line API is not installed"
 	fi
 
 	# Check if yocto is accessible
