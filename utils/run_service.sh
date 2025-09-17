@@ -128,7 +128,7 @@ fi
 shutdown_sequence() {
 	return_value="$1"
 
-    if [[ "$bypassYocto" != "yes" ]] ; then
+	if [[ "$bypassYocto" != "yes" ]] ; then
 		# log supply voltage before switching off the relays
 		voltage=$(python -m hypernets.yocto.voltage)
 		echo "[INFO]  Supply voltage: $voltage V"
@@ -195,10 +195,10 @@ shutdown_sequence() {
 				log_debug "Yocto Auto-Power-Off is set to $max_wakeup_time s"
 			fi
 		fi # log next scheduled yocto wakeup if yocto command line API is installed
-    fi # [[ "$bypassYocto" != "yes" ]]
+	fi # [[ "$bypassYocto" != "yes" ]]
 
 	# check minimum uptime
-    if [[ "$keepPc" == "off" ]]; then
+	if [[ "$keepPc" == "off" ]]; then
 		uptime=$(sed -e 's/\..*//' /proc/uptime)
 
 		## minimum allowed uptime is 2 minutes for:
@@ -222,13 +222,22 @@ shutdown_sequence() {
 		fi
 	fi # "$keepPc" == "off"
 
+	log_supply
+
+	## log power consumption if 2nd gen Yocto
+	if [[ ${is_yocto_pictor_wifi-} != 1 && $(command -v YPower) ]]; then
+		pow_meter=$(YPower -f '[result]' -r 127.0.0.1 $yoctoPrefix get_meter)
+		pow_unit=$(YPower -f '[result]' -r 127.0.0.1 $yoctoPrefix get_unit)
+		log_info "Consumed power: $pow_meter ${pow_unit}h"
+	fi
+
 	# Sleep inhibited by sleep.lock
 	if [ -f sleep.lock ]; then
 		keepPc="on"
 		sleepLocked=1
 	fi
 
-    if [[ "$keepPc" == "off" ]]; then
+	if [[ "$keepPc" == "off" ]]; then
 	    log_info "Option : Keep PC OFF"
 
 	    log_info "Send Yoctopuce To sleep (or not)"
@@ -259,7 +268,7 @@ shutdown_sequence() {
 
 		log_error "NOT shutting down !!"
 	    exit 1
-    else
+	else
 	    log_info "Option : Keep PC ON"
 
 		# Test run
@@ -284,7 +293,7 @@ shutdown_sequence() {
 
 	    # Cause systemd service exit 1 and doesn't execute SuccessAction=poweroff
 	    exit 1
-    fi
+	fi
 }
 
 
@@ -350,13 +359,13 @@ debug_yocto(){
 log_schedule(){
 	## return if less than DEBUG log level
 	if [[ $numeric_verbosity -lt 4 ]]; then
-		return
+		return 0
 	fi
 
 	# check if Yocto command line API is installed
 	if [[ ! $(command -v YWakeUpSchedule) ]]; then
 		log_error "}Yocto API is not installed"
-		return
+		return 0
 	fi
 
 	## Log Yocto wake-up schedules
@@ -429,6 +438,43 @@ log_schedule(){
 
 	done # n_sched in 1 2 3
 } # log_schedule()
+
+
+log_supply(){
+	## return if less than DEBUG log level
+	if [[ $numeric_verbosity -lt 4 ]]; then
+		return 0
+	fi
+
+	# check if Yocto command line API is installed
+	if [[ ! $(command -v YThreshold) ]]; then
+		log_error "}Yocto API is not installed"
+		return 0
+	fi
+
+	## log current, voltage and thresholds if 2nd gen Yocto
+	if [[ ${is_yocto_pictor_wifi-} != 1 ]]; then
+		alert_lvl=$(YThreshold -f '[result]' -r 127.0.0.1 $yoctoPrefix get_alertLevel)
+		safe_lvl=$(YThreshold -f '[result]' -r 127.0.0.1 $yoctoPrefix get_safeLevel)
+		cur_state=$(YThreshold -f '[result]' -r 127.0.0.1 $yoctoPrefix get_thresholdState)
+		log_debug "Brown-out protection trigger/restore limits: $alert_lvl V / $safe_lvl V; current state is $cur_state"
+
+		volt_min=$(YVoltage -f '[result]' -r 127.0.0.1 $yoctoPrefix get_lowestValue)
+		volt_max=$(YVoltage -f '[result]' -r 127.0.0.1 $yoctoPrefix get_highestValue)
+		volt_unit=$(YVoltage -f '[result]' -r 127.0.0.1 $yoctoPrefix get_unit)
+		log_debug "Supply voltage: min = $volt_min $volt_unit, max = $volt_max $volt_unit" 
+
+		cur_min=$(YCurrent -f '[result]' -r 127.0.0.1 $yoctoPrefix get_lowestValue)
+		cur_max=$(YCurrent -f '[result]' -r 127.0.0.1 $yoctoPrefix get_highestValue)
+		cur_unit=$(YCurrent -f '[result]' -r 127.0.0.1 $yoctoPrefix get_unit)
+		log_debug "Supply current: min = $cur_min $cur_unit, max = $cur_max $cur_unit" 
+
+		pow_min=$(YPower -f '[result]' -r 127.0.0.1 $yoctoPrefix get_lowestValue)
+		pow_max=$(YPower -f '[result]' -r 127.0.0.1 $yoctoPrefix get_highestValue)
+		pow_unit=$(YPower -f '[result]' -r 127.0.0.1 $yoctoPrefix get_unit)
+		log_debug "Power consumption: min = $pow_min $pow_unit, max = $pow_max $pow_unit" 
+	fi
+} # log_supply()
 
 
 # log operating system release
@@ -516,6 +562,7 @@ if [[ "$bypassYocto" != "yes" ]] ; then
 		log_info "Found Yocto"
 		yoctoFW=$(python -m hypernets.yocto.get_FW_ver)
 		log_info "$yoctoFW"
+		log_supply
 	elif [[ $retcode1 == 8 || $retcode2 == 8 ]]; then 
 		# Server issued an error response. Probably 404 not found.
 		if [[ $retcode1 == 8 ]]; then
@@ -552,6 +599,11 @@ if [[ "$bypassYocto" != "yes" ]] ; then
 					# log supply voltage
 					voltage=$(python -m hypernets.yocto.voltage)
 					log_error "Supply voltage: $voltage V"
+
+					# log wake-up state
+					log_error "Is PC powered by relay override switch while Yocto is sleeping with deep sleep disabled?"
+					yocto_wakeup_state=$(YWakeUpMonitor -f '[result]' -r 127.0.0.1 $yoctoPrefix get_wakeUpState)
+					log_error "Yocto wake-up state is $yocto_wakeup_state"
 				fi
 			else
 			## only uuper board failed
