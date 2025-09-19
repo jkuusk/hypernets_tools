@@ -24,7 +24,7 @@ yocto_gps = YGNSSMK2-XXXXXX
 # Set bypass_yocto = yes to test only the radiometer functionality
 bypass_yocto = no
 
-# debug_yocto - dump Yocto debug information into OTHER/ during the sequence
+# debug_yocto - dump Yocto debug information into LOGS/ during the sequence
 # Allowed values: yes/no
 debug_yocto = no
 

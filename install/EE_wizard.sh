@@ -46,7 +46,33 @@ function update_repo(){
 	echo 
 	echo "-- Update Hypernets Tools..."
 	echo "------------------------------------------------"
+	before_sha="$(sudo -u $SUDO_USER git rev-parse HEAD)"
 	sudo -u $SUDO_USER git pull
+	after_sha="$(sudo -u $SUDO_USER git rev-parse HEAD)"
+
+	# If no new commits were pulled, nothing changed
+	if [[ "$before_sha" == "$after_sha" ]]; then
+		return 0
+	fi
+
+	# Check if install/bash_aliases changed between the two SHAs
+	if sudo -u $SUDO_USER git diff --name-only "$before_sha" "$after_sha" -- install/bash_aliases | grep -q .; then
+		echo
+		echo
+		echo "*******  install/bash_aliases was updated by the pull.  *******"
+		echo "*******  Please run item 10) Setup command line tools   *******"
+		echo
+	fi
+
+	# Check if install/EE_wizard.sh changed between the two SHAs
+	if sudo -u $SUDO_USER git diff --name-only "$before_sha" "$after_sha" -- install/EE_wizard.sh | grep -q .; then
+		echo
+		echo
+		echo "*******  install/EE_wizard.sh was updated by the pull.  *******"
+		echo "*******  Please restart the install wizard.             *******"
+		echo
+		exit 0
+	fi
 }
 
 
@@ -57,6 +83,7 @@ function download_yoctohub(){
 	echo "------------------------------------------------"
 	./install/00_install_yoctohub.sh
 }
+
 
 function auto_config_yocto(){
 	echo 
@@ -137,6 +164,7 @@ function auto_config_yocto(){
 	echo "****** You should now edit the configuration files before continuing with the configuration ******"
 	echo
 }
+
 
 function install_dependencies(){
 	echo 

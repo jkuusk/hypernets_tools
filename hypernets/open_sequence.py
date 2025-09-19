@@ -259,7 +259,7 @@ def run_sequence_file(sequence_file, instrument_port, instrument_br, # noqa C901
                         instrument_instance.get_hw_info()
                     else:
                         error("SWIR+TEC hardware not available")
-                        exit(27)
+                        exit(37)
 
             info(f"Cooling SWIR module to {instrument_swir_tec}°C...")
             instrument_instance.set_SWIR_module_temperature(instrument_swir_tec)

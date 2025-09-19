@@ -1,3 +1,19 @@
+Version 3.2.0: (2025-09-18)
+	- pt command attempts moving if reading current position fails and the
+	  movement request is not relative to current position
+	- change SWIR+TEC or MUX+SWIR+TEC missing exit code from 27 to 37
+	- log yocto env sensors if exit code is 27: radiometer is not responding
+	- power cycle for second attempt if exit code is 37: (MUX+)SWIR+TEC missing
+	- fix pt residual reporting for single axis movement
+	- log wake-up state if yocto lower board is not detected
+	- log peak current/voltage/power if 2nd gen yocto
+	- fix yocto debug and save the yocto logs to LOGS folder
+	- log virtualhub and Yocto API versions
+	- print warnings in install wizard step 1 if wizard itself or bash_aliases
+	  were updated by git pull
+	- auto-update hypernets_tools in hypernets-hello service only if fast-forward 
+	  is possible
+
 Version 3.1.5: (2025-09-05)
 	- when creating logs check if any log exists, not only sequence log
 	- overwrite the hard link instead of erroring out if it already exists in ARCHIVE

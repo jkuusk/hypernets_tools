@@ -128,7 +128,7 @@ fi
 shutdown_sequence() {
 	return_value="$1"
 
-    if [[ "$bypassYocto" != "yes" ]] ; then
+	if [[ "$bypassYocto" != "yes" ]] ; then
 		# log supply voltage before switching off the relays
 		voltage=$(python -m hypernets.yocto.voltage)
 		echo "[INFO]  Supply voltage: $voltage V"
@@ -195,10 +195,10 @@ shutdown_sequence() {
 				log_debug "Yocto Auto-Power-Off is set to $max_wakeup_time s"
 			fi
 		fi # log next scheduled yocto wakeup if yocto command line API is installed
-    fi # [[ "$bypassYocto" != "yes" ]]
+	fi # [[ "$bypassYocto" != "yes" ]]
 
 	# check minimum uptime
-    if [[ "$keepPc" == "off" ]]; then
+	if [[ "$keepPc" == "off" ]]; then
 		uptime=$(sed -e 's/\..*//' /proc/uptime)
 
 		## minimum allowed uptime is 2 minutes for:
@@ -222,18 +222,27 @@ shutdown_sequence() {
 		fi
 	fi # "$keepPc" == "off"
 
+	log_supply
+
+	## log power consumption if 2nd gen Yocto
+	if [[ ${is_yocto_pictor_wifi-} != 1 && $(command -v YPower) ]]; then
+		pow_meter=$(YPower -f '[result]' -r 127.0.0.1 $yoctoPrefix get_meter)
+		pow_unit=$(YPower -f '[result]' -r 127.0.0.1 $yoctoPrefix get_unit)
+		log_info "Consumed power: $pow_meter ${pow_unit}h"
+	fi
+
 	# Sleep inhibited by sleep.lock
 	if [ -f sleep.lock ]; then
 		keepPc="on"
 		sleepLocked=1
 	fi
 
-    if [[ "$keepPc" == "off" ]]; then
-	    log_info "Option : Keep PC OFF"
+	if [[ "$keepPc" == "off" ]]; then
+		log_info "Option : Keep PC OFF"
 
-	    log_info "Send Yoctopuce To sleep (or not)"
+		log_info "Send Yoctopuce To sleep (or not)"
 		set +e
-	    python -m hypernets.yocto.sleep_monitor
+		python -m hypernets.yocto.sleep_monitor
 		yocto_sleep=$?
 		set -e
 
@@ -249,7 +258,7 @@ shutdown_sequence() {
 		fi
 
 		# Something went wrong
-	    # Cause service exit 1 and doesn't execute SuccessAction=poweroff
+		# Cause service exit 1 and doesn't execute SuccessAction=poweroff
 		if [[ $yocto_sleep -eq 1 ]]; then
 			log_error "Yocto unreachable !!"
 		elif [[ $yocto_sleep -eq 255 ]]; then
@@ -258,9 +267,9 @@ shutdown_sequence() {
 		fi
 
 		log_error "NOT shutting down !!"
-	    exit 1
-    else
-	    log_info "Option : Keep PC ON"
+		exit 1
+	else
+		log_info "Option : Keep PC ON"
 
 		# Test run
 		if [[ "${keepPcInConf-}" == "off" ]]; then
@@ -284,79 +293,79 @@ shutdown_sequence() {
 
 	    # Cause systemd service exit 1 and doesn't execute SuccessAction=poweroff
 	    exit 1
-    fi
+	fi
 }
 
 
 
 debug_yocto(){
-    # ------------------------------------------------------------------------------
-    # YOCTO DEBUG ------------------------------------------------------------------
-    # ------------------------------------------------------------------------------
-    echo "[DEBUG]  Check if Yocto-Pictor is in (pseudo) deep-sleep mode..."
-    set +e
-    yoctoState=$(wget -O- \
-        'http://127.0.0.1:4444/bySerial/$yoctoPrefix/api/wakeUpMonitor/wakeUpState' \
-        2> /dev/null)
+	log_debug "Check if Yocto-Pictor is in (pseudo) deep-sleep mode..."
 
-    if [[ ! $? -eq 0 ]] ; then
-        echo "[DEBUG]  Fail to get Yocto-Pictor wake-up state !"
-        return 1
-    fi
+	# check if Yocto command line API is installed
+	if [[ ! $(command -v YModule) ]]; then
+		log_warning "Yocto API is not installed"
+		return 0
+	fi
 
-    echo "[DEBUG]  Yocto-Pictor wake-up state : $yoctoState"
+	yocto_wakeup_state=$(YWakeUpMonitor -f '[result]' -r 127.0.0.1 $yoctoPrefix get_wakeUpState)
 
-    if [[ $yoctoState == "SLEEPING" ]] ; then
-        echo "[DEBUG]  Awaking Yocto-Pictor..."
-        yoctoState=$(wget -O- \
-            'http://127.0.0.1:4444/bySerial/$yoctoPrefix/api/wakeUpMonitor?wakeUpState=1' \
-            2> /dev/null)
-                    if [[ ! $? -eq 0 ]] ; then
-                        echo "[DEBUG]  Fail to wake-up the Yocto-Pictor !"
-                        return 1
-                    fi
-                    sleep 2
-    fi
+	if [[ ! $? -eq 0 ]] ; then
+		log_error "Failed to get Yocto-Pictor wake-up state !"
+		return 0
+	fi
 
-    logNameBase=$(date +"%Y-%m-%d-%H%M")
+	log_debug "Yocto-Pictor wake-up state : $yocto_wakeup_state"
 
-    suffixeName=""
-    for i in {001..999}; do
-        if [ -f "OTHER/$logNameBase$suffixeName-log.txt" ] ||
-            [ -f "OTHER/$logNameBase$suffixeName-api.txt" ]; then
-                    echo "[DEBUG]  Error the log already exists! ($i)"
-                    suffixeName=$(echo "-$i")
-                else
-                    logNameBase=$(echo $logNameBase$suffixeName)
-                    break
-        fi
-    done
+	if [[ $yocto_wakeup_state == "SLEEPING" ]] ; then
+		log_info "Awaking Yocto-Pictor..."
+		YWakeUpMonitor -f '[result]' -r 127.0.0.1 $yoctoPrefix wakeUp > /dev/null
+		if [[ ! $? -eq 0 ]] ; then
+			log_error "Failed to wake up the Yocto-Pictor !"
+			return 0
+		fi
+		sleep 5
+	fi
 
-    echo "[DEBUG]  Getting LOGS.txt and API.txt (prefix: $logNameBase)..."
+	set +e
+	last_boot_timestamp=$(journalctl -b --output-fields=__REALTIME_TIMESTAMP -o export | grep -m 1 __REALTIME_TIMESTAMP | sed -e 's/.*=//')
+	set -e
 
-    wget -O- 'http://127.0.0.1:4444/bySerial/$yoctoPrefix/api.txt' > \
-        "OTHER/$logNameBase-api.txt" 2> /dev/null
+	## truncate microseconds
+	last_boot_timestamp=${last_boot_timestamp::-6}
 
-    wget -O- 'http://127.0.0.1:4444/bySerial/$yoctoPrefix/logs.txt' > \
-        "OTHER/$logNameBase-log.txt" 2> /dev/null
+	logNameBase=$(date +"%Y-%m-%d-%H%M" -d @$last_boot_timestamp)
+	YMFolder=$(date +"%Y/%m" -d @$last_boot_timestamp)
 
-    set -e
-    # ------------------------------------------------------------------------------
-    # \ YOCTO DEBUG ----------------------------------------------------------------
-    # ------------------------------------------------------------------------------
-}
+	## create LOG folder if it does not exist already
+	mkdir -p LOGS/$YMFolder/
+
+	suffixeName=""
+	for i in {001..999}; do
+		if [ -f "LOGS/$YMFolder/${logNameBase}${suffixeName}-yocto.log" ] || \
+		   [ -f "ARCHIVE/LOGS/$YMFolder/${logNameBase}${suffixeName}-yocto.log" ]; then
+			log_warning "Yocto log already exists! ($i)"
+			suffixeName="-$i"
+		else
+			logNameBase="${logNameBase}${suffixeName}"
+			break
+		fi
+	done
+
+	log_info "Saving Yocto debug info into LOGS/$YMFolder/${logNameBase}-yocto.log"
+	YModule -r 127.0.0.1 showDebugInformation > "LOGS/$YMFolder/${logNameBase}-yocto.log" 2>&1
+} # debug_yocto()
 
 
 log_schedule(){
 	## return if less than DEBUG log level
 	if [[ $numeric_verbosity -lt 4 ]]; then
-		return
+		return 0
 	fi
 
 	# check if Yocto command line API is installed
 	if [[ ! $(command -v YWakeUpSchedule) ]]; then
-		log_error "}Yocto API is not installed"
-		return
+		log_warning "Yocto API is not installed"
+		return 0
 	fi
 
 	## Log Yocto wake-up schedules
@@ -431,6 +440,43 @@ log_schedule(){
 } # log_schedule()
 
 
+log_supply(){
+	## return if less than DEBUG log level
+	if [[ $numeric_verbosity -lt 4 ]]; then
+		return 0
+	fi
+
+	# check if Yocto command line API is installed
+	if [[ ! $(command -v YThreshold) ]]; then
+		log_warning "Yocto API is not installed"
+		return 0
+	fi
+
+	## log current, voltage and thresholds if 2nd gen Yocto
+	if [[ ${is_yocto_pictor_wifi-} != 1 ]]; then
+		alert_lvl=$(YThreshold -f '[result]' -r 127.0.0.1 $yoctoPrefix get_alertLevel)
+		safe_lvl=$(YThreshold -f '[result]' -r 127.0.0.1 $yoctoPrefix get_safeLevel)
+		cur_state=$(YThreshold -f '[result]' -r 127.0.0.1 $yoctoPrefix get_thresholdState)
+		log_debug "Brown-out protection trigger/restore limits: $alert_lvl V / $safe_lvl V; current state is $cur_state"
+
+		volt_min=$(YVoltage -f '[result]' -r 127.0.0.1 $yoctoPrefix get_lowestValue)
+		volt_max=$(YVoltage -f '[result]' -r 127.0.0.1 $yoctoPrefix get_highestValue)
+		volt_unit=$(YVoltage -f '[result]' -r 127.0.0.1 $yoctoPrefix get_unit)
+		log_debug "Supply voltage: min = $volt_min $volt_unit, max = $volt_max $volt_unit" 
+
+		cur_min=$(YCurrent -f '[result]' -r 127.0.0.1 $yoctoPrefix get_lowestValue)
+		cur_max=$(YCurrent -f '[result]' -r 127.0.0.1 $yoctoPrefix get_highestValue)
+		cur_unit=$(YCurrent -f '[result]' -r 127.0.0.1 $yoctoPrefix get_unit)
+		log_debug "Supply current: min = $cur_min $cur_unit, max = $cur_max $cur_unit" 
+
+		pow_min=$(YPower -f '[result]' -r 127.0.0.1 $yoctoPrefix get_lowestValue)
+		pow_max=$(YPower -f '[result]' -r 127.0.0.1 $yoctoPrefix get_highestValue)
+		pow_unit=$(YPower -f '[result]' -r 127.0.0.1 $yoctoPrefix get_unit)
+		log_debug "Power consumption: min = $pow_min $pow_unit, max = $pow_max $pow_unit" 
+	fi
+} # log_supply()
+
+
 # log operating system release
 if [ -f /etc/os-release ]; then
 	source /etc/os-release
@@ -479,24 +525,30 @@ if [[ "$bypassYocto" != "yes" ]] ; then
 
 	# Ensure Yocto is online
 	set +e
+	for path in /usr/bin/VirtualHub /usr/sbin/VirtualHub; do
+		if [ -x "$path" ]; then
+			virtualhub_path="$path"
+			break
+		fi
+	done
 	# check if VirtualHub is running
 	systemctl is-active yvirtualhub.service > /dev/null
 	if [[ $? -eq 0 ]] ; then
 		set -e
-		log_info "VirtualHub is running."
+		log_info "VirtualHub is running: $("$virtualhub_path" -v 2>&1)"
 	else
 		set -e
 		log_info "Starting VirtualHub..."
-        if [[ "$ID" == "manjaro" ]]; then
-		    /usr/bin/VirtualHub &
-        elif [[ "$ID" == "debian" ]]; then
-            /usr/sbin/VirtualHub &
-        else
-            log_error "Not able to identify the distribution."
-            exit 0
-        fi
+		"$virtualhub_path" &
 		sleep 2
 		log_info "ok"
+	fi
+
+	# log yocto API version
+	if [[ $(command -v YModule) ]]; then
+		log_info "Yocto command line API version: $(YModule -r 127.0.0.1 version | cut -d " " -f 4)"
+	else
+		log_warning "Yocto command line API is not installed"
 	fi
 
 	# Check if yocto is accessible
@@ -516,6 +568,7 @@ if [[ "$bypassYocto" != "yes" ]] ; then
 		log_info "Found Yocto"
 		yoctoFW=$(python -m hypernets.yocto.get_FW_ver)
 		log_info "$yoctoFW"
+		log_supply
 	elif [[ $retcode1 == 8 || $retcode2 == 8 ]]; then 
 		# Server issued an error response. Probably 404 not found.
 		if [[ $retcode1 == 8 ]]; then
@@ -552,6 +605,11 @@ if [[ "$bypassYocto" != "yes" ]] ; then
 					# log supply voltage
 					voltage=$(python -m hypernets.yocto.voltage)
 					log_error "Supply voltage: $voltage V"
+
+					# log wake-up state
+					log_error "Is PC powered by relay override switch while Yocto is sleeping with deep sleep disabled?"
+					yocto_wakeup_state=$(YWakeUpMonitor -f '[result]' -r 127.0.0.1 $yoctoPrefix get_wakeUpState)
+					log_error "Yocto wake-up state is $yocto_wakeup_state"
 				fi
 			else
 			## only uuper board failed
@@ -725,14 +783,18 @@ exit_actions() {
 		if [ $return_value -ne 30 ] && [ $return_value -ne 40 ] && \
 				[ $return_value -ne 88 ] && [ $return_value -ne 98 ]; then
 			sleep 1
+
 			## 6 - instrunent failed to init comms
+			## 37 - MUX and/or SWIR+TEC not available
 			## 78 - VM stabilisation failed
 			## power cycle, otherwise the second attempt fails as well
-			if [ $return_value -eq 6 ] || [ $return_value -eq 78 ]; then
+			if [ $return_value -eq 6 ] || [ $return_value -eq 37 ] || \
+					[ $return_value -eq 78 ]; then
 				echo "[INFO]  Power cycling the radiometer"
 				python -m hypernets.yocto.relay -soff -n3
 				sleep 10
 			fi
+
 			echo "[WARNING]  Second try : "
 			set +e
 			python3 -m hypernets.open_sequence -f $sequence_file $extra_args
@@ -741,6 +803,12 @@ exit_actions() {
 		        echo "[INFO]  Success on second attempt"
 		    else
 				echo "[WARNING]  Hysptar scheduled job on second attempt exited with code $return_value";
+
+				## 27 - Radiometer is not responding
+				## log yocto env sensors (RH inside host unit)
+				if [ $return_value -eq 27 ]; then
+					log_info "Yocto meteo: $(python -m hypernets.yocto.meteo | sed -E -e 's/\(|\)|\[|\]|\"//g' | sed -e "s/'//2g" | sed '-es/,//'{7..1..2})"
+				fi
 			fi
 			set -e
 		fi

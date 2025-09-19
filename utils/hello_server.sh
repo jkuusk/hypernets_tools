@@ -322,7 +322,7 @@ bidirectional_sync "config_dynamic.ini" \
 if [[ "$autoUpdate" == "yes" ]] ; then
 	echo "[INFO]  Auto Update ON"
 	set +e
-	git pull
+	git pull --ff-only
 	if [ $? -ne 0 ]; then echo "[ERROR]  Can't pull : do you have local change ?" ; fi
 	set -e
 fi

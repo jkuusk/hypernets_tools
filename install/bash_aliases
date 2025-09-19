@@ -474,7 +474,7 @@ pt() (
 		echo "pt                          without options returns the current pan-tilt position"
 		echo "   new_pan new_tilt         move pan-tilt while accounting for the offsets in config_dynamic.ini"
 		echo "   abs new_pan new_tilt     move pan-tilt to absolute position"
-		echo "   sun new_pan new_tilt     move pan-tilt to position relative to the sun"
+		echo "   sun [new_pan new_tilt]   move pan-tilt to position relative to the sun (default: sun 0 0)"
 		echo "   delta new_pan new_tilt   move pan-tilt relative to the current position"
 		echo "   led                      move tilt to LED irradiance measurement position"
 		echo
@@ -603,18 +603,27 @@ EOF
 
 	if [[ "$current_abs_pos" == "" ]]; then
 		echo "${XHL}Failed to read current position from pan-tilt!${RESET_HL}"
-		exit -1
+		abs_pos_read_failed=1
+
+		if [ "$deltapos" = 1 ]; then
+			echo "${XHL}Cannot make relative movement without current position!${RESET_HL}"
+			exit -1
+		fi
+	else
+		current_abs_pan=$(cut -f 1 <<< $current_abs_pos)
+		current_abs_tilt=$(cut -f 2 <<< $current_abs_pos)
+
+		## calculate current position in hypy coords
+		current_hyper_pan=$(printf "%.1f" $(bc <<< "(($current_abs_pan) + ($offset_pan) + 36000) % 360"))
+		current_hyper_tilt=$(printf "%.1f" $(bc <<< "(($current_abs_tilt) + ($offset_tilt) + 36000) % 360"))
 	fi
-
-	current_abs_pan=$(cut -f 1 <<< $current_abs_pos)
-	current_abs_tilt=$(cut -f 2 <<< $current_abs_pos)
-
-	## calculate current position in hypy coords
-	current_hyper_pan=$(printf "%.1f" $(bc <<< "(($current_abs_pan) + ($offset_pan) + 36000) % 360"))
-	current_hyper_tilt=$(printf "%.1f" $(bc <<< "(($current_abs_tilt) + ($offset_tilt) + 36000) % 360"))
 
 	############### print current position #################
 	if [[ "${1-}" == "" ]]; then
+		if [[ ${abs_pos_read_failed-} == 1 ]]; then
+			exit -1
+		fi
+
 		echo "Current parameters"
 		echo "offset_pan = $offset_pan"
 		echo "offset_tilt = $offset_tilt"
@@ -637,9 +646,7 @@ EOF
 		new_pan="${1#+}"
 		new_tilt="${2#+}"
 
-		if [[ "$new_pan"  =~ ^([xX])$ ]]; then ## use current
-			requested_abs_pan=$current_abs_pan
-		elif [ "$abspos" = 1 ]; then ## requested abs
+		if [ "$abspos" = 1 ]; then ## requested abs
 			requested_abs_pan="$new_pan"
 		elif [ "$sunpos" = 1 ]; then ## requested sun
 			requested_rel_sun_pan=$(bc <<< "$sun_azimuth + ($new_pan)")
@@ -650,9 +657,7 @@ EOF
 			requested_abs_pan=$(printf "%.1f" $(bc <<< "(($new_pan) - ($offset_pan) + 36000) % 360"))
 		fi
 
-		if [[ "$new_tilt" =~ ^([xX])$ ]]; then ## use current
-			requested_abs_tilt=$current_abs_tilt
-		elif [ "$abspos" = 1 ]; then ## requested abs
+		if [ "$abspos" = 1 ]; then ## requested abs
 			requested_abs_tilt="$new_tilt"
 		elif [ "$sunpos" = 1 ]; then ## requested sun, zenith is 180 in relative coords
 			requested_rel_sun_tilt=$(bc <<< "(180 - $sun_zenith + ($new_tilt))")
@@ -664,8 +669,12 @@ EOF
 		fi
 
 		## force to 0...360 range
-		requested_abs_pan=$(bc <<< "($requested_abs_pan + 36000) % 360")
-		requested_abs_tilt=$(bc <<< "($requested_abs_tilt + 36000) % 360")
+		if [[ ! "$new_pan"  =~ ^([xX])$ ]]; then
+			requested_abs_pan=$(bc <<< "($requested_abs_pan + 36000) % 360")
+		fi
+		if [[ ! "$new_tilt" =~ ^([xX])$ ]]; then
+			requested_abs_tilt=$(bc <<< "($requested_abs_tilt + 36000) % 360")
+		fi
 	
 		## don't move the axis with "x" position to avoid any full rotations due to 0/360 position uncertainty
 		if [[ "$new_pan" =~ ^([xX])$ ]] && [[ "$new_tilt" =~ ^([xX])$ ]]; then
@@ -686,7 +695,15 @@ EOF
 
 		if [[ ! $output =~ "ERROR" ]]; then
 			## read new abs positions
+			set +e
 			new_abs_pos=$(python -m hypernets.geometry.pan_tilt -g 2>&1 | grep -Eo '[0-9]+([.][0-9]+)?' | paste -s) # pan	tilt
+			set -e
+
+			if [[ "$new_abs_pos" == "" ]]; then
+				echo "${XHL}Failed to read new position from pan-tilt!${RESET_HL}"
+				exit -1
+			fi
+
 			new_abs_pan=$(cut -f 1 <<< $new_abs_pos)
 			new_abs_tilt=$(cut -f 2 <<< $new_abs_pos)
 		
@@ -695,12 +712,21 @@ EOF
 			new_hyper_tilt=$(printf "%.1f" $(bc <<< "(($new_abs_tilt) + ($offset_tilt) + 36000) % 360"))
 	
 			## calculate residuals
-			residual_pan=$(bc <<< "$new_abs_pan - $requested_abs_pan")
-			residual_tilt=$(bc <<< "$new_abs_tilt - $requested_abs_tilt")
+			if [[ "$new_pan"  =~ ^([xX])$ ]]; then
+				residual_pan="x"
+			else
+				residual_pan=$(printf "%.1f" "$(bc <<< "$new_abs_pan - $requested_abs_pan")")
+			fi
+
+			if [[ "$new_tilt"  =~ ^([xX])$ ]]; then
+				residual_tilt="x"
+			else
+				residual_tilt=$(printf "%.1f" "$(bc <<< "$new_abs_tilt - $requested_abs_tilt")")
+			fi
 	
 			echo
 			echo "New positions"
-			printf "abs:   pan = %.1f, tilt = %.1f, residuals: pan = %.1f, tilt = %.1f\n" "$new_abs_pan" "$new_abs_tilt" "$residual_pan" "$residual_tilt"
+			printf "abs:   pan = %.1f, tilt = %.1f, residuals: pan = %s, tilt = %s\n" "$new_abs_pan" "$new_abs_tilt" "$residual_pan" "$residual_tilt"
 			printf "hyper: pan = %.1f, tilt = %.1f\n" "$new_hyper_pan" "$new_hyper_tilt"
 		else
 			echo -e "\n${XHL}$output${RESET_HL}\n"
