@@ -9,19 +9,17 @@ if [[ ${PWD##*/} != "hypernets_tools"* ]]; then
     exit 1
 fi
 
-#if [[ "${1-}" == "-h" ]] || [[ "${1-}" == "--help" ]]; then
 usage() {
-	echo "$0 [-h|--help] [-m max_offset] [-l loglevel]"
+	echo "$0 [-h] [-m max_offset] [-l loglevel]"
 	echo
 	echo "Sync PC clock to Yocto GPS time"
 	echo 
 	echo "  -m max_offset   sync only if difference from GPS time is larger than max_offset seconds"
 	echo "  -l loglevel     numeric loglevel: 1=ERROR, 2=WARNING, 3=INFO(default), 4=DEBUG"
-	echo "  -h, --help      print this help"
+	echo "  -h              print this help"
 	echo
 	exit
 }
-#fi
 
 log_debug() { if [[ $numeric_verbosity -ge 4 ]]; then echo "[DEBUG]  $1"; fi }
 log_info() { if [[ $numeric_verbosity -ge 3 ]]; then echo "[INFO]  $1"; fi }
@@ -85,21 +83,33 @@ set -e
 log_info "Checking if PC clock is within $max_offset s from Yocto GPS"
 
 # check if pc clock is in sync with gps
+rtc_timestamp=$(YRealTimeClock -f '[result]' -r 127.0.0.1 $yocto get_unixTime | cut -d " " -f 1)
 gps=$(python -m hypernets.yocto.gps | sed -e "s/, /\t/g; s/[()]//g; s/b\?'//g")
+sys_timestamp=$(date -u +%s)
 gps_datetime=$(cut -f 3 <<< $gps)
 
 if [[ "$gps_datetime" != "N/A" ]] && [[ "$gps_datetime" != "" ]]; then 
 	# gps has fix
-	sys_timestamp=$(date -u +%s)
 	gps_timestamp=$(date -d "$gps_datetime UTC" -u +%s)
 	delta=$(( sys_timestamp - gps_timestamp ))
 
 	# Sync PC clock to yocto GPS if absolute difference is over $max_offset seconds
 	if [[ "${delta#-}" -gt "$max_offset" ]]; then
-		echo "[WARNING] PC clock is not synced with Yocto GPS"
-		echo "[WARNING] Yocto GPS time: $gps_datetime UTC"
-		echo "[WARNING] PC time:        $(date -u -d @$sys_timestamp '+%Y/%m/%d %H:%M:%S') UTC"
-		echo "[WARNING] Syncing PC clock to Yocto GPS"
+		log_warning "PC clock is not synced with Yocto GPS"
+		log_warning "Yocto GPS time: $gps_datetime UTC"
+		log_warning "PC time:        $(date -u -d @$sys_timestamp '+%Y/%m/%d %H:%M:%S') UTC"
+
+		## check if Yocto GPS timestamp and RTC timestamp are the same(ish)
+		yocto_offset=$(YRealTimeClock -f '[result]' -r 127.0.0.1 $yocto get_utcOffset)
+		yocto_delta=$(( rtc_timestamp - yocto_offset - gps_timestamp ))
+		if [[ "${yocto_delta#-}" -gt 5 ]]; then
+			log_warning "Yocto RTC time: $(date -u -d @$rtc_timestamp '+%Y/%m/%d %H:%M:%S') UTC"
+			log_error "Yocto RTC and GPS timestamp difference is $yocto_delta s !!"
+			utils/dump_yocto_logs.sh
+			exit -1
+		fi
+
+		log_warning "Syncing PC clock to Yocto GPS"
 
 		# check if ntp is enabled and disable if it is, 
 		# otherwise timedatectl won't allow setting the time
@@ -109,7 +119,7 @@ if [[ "$gps_datetime" != "N/A" ]] && [[ "$gps_datetime" != "" ]]; then
 		fi
 
 		# make new timedate in local time zone without -u since timedatect set-time uses local time zone
-		new_timedate=$(date -d @$gps_timestamp '+%Y-%m-%d %H:%M:%S')
+		new_timedate=$(date -u -d @$gps_timestamp '+%Y-%m-%d %H:%M:%S')
 		timedatectl --no-ask-password --no-pager set-time "$new_timedate" > /dev/null
 
 		# re-enable ntp if it was enabled before
@@ -119,16 +129,15 @@ if [[ "$gps_datetime" != "N/A" ]] && [[ "$gps_datetime" != "" ]]; then
 
 		# print the pc and yocto gps times after sync
 		gps=$(python -m hypernets.yocto.gps | sed -e "s/, /\t/g; s/[()]//g; s/b\?'//g")
-		gps_datetime=$(cut -f 3 <<< $gps)
 		sys_timestamp=$(date -u +%s)
-		gps_timestamp=$(date -d "$gps_datetime UTC" -u +%s)
-		echo "[WARNING] After syncing PC clock"
-		echo "[WARNING] Yocto GPS time: $gps_datetime UTC"
-		echo "[WARNING] PC time:        $(date -u -d @$sys_timestamp '+%Y/%m/%d %H:%M:%S') UTC"
+		gps_datetime=$(cut -f 3 <<< $gps)
+		log_warning "After syncing PC clock"
+		log_warning "Yocto GPS time: $gps_datetime UTC"
+		log_warning "PC time:        $(date -u -d @$sys_timestamp '+%Y/%m/%d %H:%M:%S') UTC"
 	else 
 		log_info "PC clock is within $max_offset seconds from Yocto GPS time"
 	fi
 else
 	log_info "No GPS time available from Yocto"
-fi
+fi # [[ "$gps_timestamp" != 0 ]]
 
