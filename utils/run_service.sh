@@ -128,7 +128,7 @@ fi
 shutdown_sequence() {
 	return_value="$1"
 
-	if [[ "$bypassYocto" != "yes" ]] ; then
+	if [[ "$bypassYocto" == "yes" ]] ; then
 		log_warning "Bypassing Yocto and not shutting down"
 
 		# Skip all shutdown actions
