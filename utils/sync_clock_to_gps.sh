@@ -102,8 +102,14 @@ if [[ "$gps_datetime" != "N/A" ]] && [[ "$gps_datetime" != "" ]]; then
 		## check if Yocto GPS timestamp and RTC timestamp are the same(ish)
 		yocto_offset=$(YRealTimeClock -f '[result]' -r 127.0.0.1 $yocto get_utcOffset)
 		yocto_delta=$(( rtc_timestamp - yocto_offset - gps_timestamp ))
-		if [[ "${yocto_delta#-}" -gt 5 ]]; then
-			log_warning "Yocto RTC time: $(date -u -d @$rtc_timestamp '+%Y/%m/%d %H:%M:%S') UTC"
+		if [[ "${yocto_delta#-}" -gt "$max_offset" ]]; then
+			if [ "$yocto_offset" = 0 ]; then
+				utc_offset=""
+			else
+				utc_offset=$(printf "%+d" $(($yocto_offset/3600)))
+			fi
+
+			log_warning "Yocto RTC time: $(date -u -d @$rtc_timestamp '+%Y/%m/%d %H:%M:%S') UTC$utc_offset"
 			log_error "Yocto RTC and GPS timestamp difference is $yocto_delta s !!"
 			utils/dump_yocto_logs.sh
 			exit -1

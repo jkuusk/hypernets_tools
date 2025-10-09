@@ -26,6 +26,8 @@ PATH="$PATH:~/.local/bin"
 source utils/configparser.sh
 
 # Hypstar Configuration:
+relay_board_prefix=$(parse_config "yocto_prefix1" config_static.ini)
+gps_board_prefix=$(parse_config "yocto_gps" config_static.ini)
 yoctoPrefix=$(parse_config "yocto_prefix2" config_static.ini)
 if [[ "$yoctoPrefix" == "" ]]; then
 # host system V4 or newer
@@ -76,10 +78,40 @@ echo >> "$filename"
 echo "----- showDebugInformation -----" >> "$filename" 2>&1
 YModule -r 127.0.0.1 showDebugInformation >> "$filename" 2>&1
 
-## Gen 2 yocto GPS comms logs
-if [[ "$is_yocto_pictor_wifi" == 0 ]]; then
+## Gen 1 yocto
+if [[ "$is_yocto_pictor_wifi" == 1 ]]; then
+	## Gen 1 yocto relay board api.txt
+	url="http://127.0.0.1:4444/bySerial/$yoctoPrefix/$relay_board_prefix/api.txt"
+	echo >> "$filename"
+	echo "----- $url -----" >> "$filename" 2>&1
+	wget -q -O- "$url" >> "$filename" 2>&1
+
+	## Gen 1 yocto relay board logs.txt
+	url="http://127.0.0.1:4444/bySerial/$yoctoPrefix/$relay_board_prefix/logs.txt"
+	echo >> "$filename"
+	echo "----- $url -----" >> "$filename" 2>&1
+	wget -q -O- "$url" >> "$filename" 2>&1
+
+	## Gen 1 yocto GPS api.txt
+	url="http://127.0.0.1:4444/bySerial/$yoctoPrefix/$gps_board_prefix/api.txt"
+	echo >> "$filename"
+	echo "----- $url -----" >> "$filename" 2>&1
+	wget -q -O- "$url" >> "$filename" 2>&1
+
+	## Gen 1 yocto GPS logs.txt
+	url="http://127.0.0.1:4444/bySerial/$yoctoPrefix/$gps_board_prefix/logs.txt"
+	echo >> "$filename"
+	echo "----- $url -----" >> "$filename" 2>&1
+	wget -q -O- "$url" >> "$filename" 2>&1
+
+	## Gen 1 yocto GPS comms logs
+	url="http://127.0.0.1:4444/bySerial/$yoctoPrefix/$gps_board_prefix/rxmsg.json?dir=2"
+	echo >> "$filename"
+	echo "----- $url -----" >> "$filename" 2>&1
+	wget -q -O- "$url" >> "$filename" 2>&1
+else
+	## Gen 2 yocto GPS comms logs
 	echo >> "$filename"
 	echo "----- download rxmsg.json?dir=2 -----" >> "$filename"  2>&1
 	YModule -r 127.0.0.1 $yoctoPrefix download rxmsg.json?dir=2 >> "$filename" 2>&1
 fi
-
