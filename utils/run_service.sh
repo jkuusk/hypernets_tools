@@ -128,74 +128,80 @@ fi
 shutdown_sequence() {
 	return_value="$1"
 
-	if [[ "$bypassYocto" != "yes" ]] ; then
-		# log supply voltage before switching off the relays
-		voltage=$(python -m hypernets.yocto.voltage)
-		echo "[INFO]  Supply voltage: $voltage V"
+	if [[ "$bypassYocto" == "yes" ]] ; then
+		log_warning "Bypassing Yocto and not shutting down"
 
-		if [[ "$startSequence" == "yes" ]] ; then
-		    log_info "Set relays #2 and #3 to OFF."
-		    python -m hypernets.yocto.relay -soff -n2 -n3
+		# Skip all shutdown actions
+        # Cause systemd service exit 1 and doesn't execute SuccessAction=poweroff
+        exit 1
+	fi
 
-			if [[ "$checkRain" == "yes" ]]; then
-				log_info "Set relay #4 to OFF."
-				python -m hypernets.yocto.relay -soff -n4
-			fi
+	# log supply voltage before switching off the relays
+	voltage=$(python -m hypernets.yocto.voltage)
+	echo "[INFO]  Supply voltage: $voltage V"
+
+	if [[ "$startSequence" == "yes" ]] ; then
+	    log_info "Set relays #2 and #3 to OFF."
+	    python -m hypernets.yocto.relay -soff -n2 -n3
+
+		if [[ "$checkRain" == "yes" ]]; then
+			log_info "Set relay #4 to OFF."
+			python -m hypernets.yocto.relay -soff -n4
+		fi
+	fi
+
+	# Sync PC clock to yocto gps if more than 5 sec out of sync
+	# and yocto gps has fix
+	set +e
+	utils/sync_clock_to_gps.sh -m 5 -l $numeric_verbosity
+	set -e
+
+	# log next scheduled yocto wakeup if yocto command line API is installed
+	if [[ $(command -v YWakeUpMonitor) ]]; then
+		yocto_time=$(YRealTimeClock -f '[result]' -r 127.0.0.1 $yoctoPrefix get_dateTime)
+		next_wakeup_timestamp=$(YWakeUpMonitor -f '[result]' -r 127.0.0.1 $yoctoPrefix get_nextWakeUp|sed -e 's/[[:space:]].*//')
+		yocto_offset=$(YRealTimeClock -f '[result]' -r 127.0.0.1 $yoctoPrefix get_utcOffset)
+
+		if [ "$yocto_offset" = 0 ]; then
+			utc_offset=""
+		else
+			utc_offset=$(printf "%+d" $(("$yocto_offset" / 3600)))
 		fi
 
-		# Sync PC clock to yocto gps if more than 5 sec out of sync
-		# and yocto gps has fix
-		set +e
-		utils/sync_clock_to_gps.sh -m 5 -l $numeric_verbosity
-		set -e
+		## Log Yocto schedules
+		if [ "$next_wakeup_timestamp" = 0 ]; then
+			log_warning "Yocto scheduled wakeup is disabled !!"
+		else
+			yocto_timestamp=$(date -d "$yocto_time UTC" -u +%s)
+			delta=$(( "$next_wakeup_timestamp" - "$yocto_timestamp" ))
+			log_info "Next Yocto wakeup is scheduled on $(date -d @$next_wakeup_timestamp '+%Y/%m/%d %H:%M:%S') UTC$utc_offset (in $delta s)"
 
-		# log next scheduled yocto wakeup if yocto command line API is installed
-		if [[ $(command -v YWakeUpMonitor) ]]; then
-			yocto_time=$(YRealTimeClock -f '[result]' -r 127.0.0.1 $yoctoPrefix get_dateTime)
-			next_wakeup_timestamp=$(YWakeUpMonitor -f '[result]' -r 127.0.0.1 $yoctoPrefix get_nextWakeUp|sed -e 's/[[:space:]].*//')
-			yocto_offset=$(YRealTimeClock -f '[result]' -r 127.0.0.1 $yoctoPrefix get_utcOffset)
+			## log next wakeup of all schedules at debug loglevel
+			for n_sched in 1 2 3; do
+				## Yocto-Pictor-Wifi has only two schedules
+				if [[ ${is_yocto_pictor_wifi-} == 1 && $n_sched == 3 ]]; then
+					break
+				fi
 
-			if [ "$yocto_offset" = 0 ]; then
-				utc_offset=""
-			else
-				utc_offset=$(printf "%+d" $(("$yocto_offset" / 3600)))
-			fi
-
-			## Log Yocto schedules
-			if [ "$next_wakeup_timestamp" = 0 ]; then
-				log_warning "Yocto scheduled wakeup is disabled !!"
-			else
-				yocto_timestamp=$(date -d "$yocto_time UTC" -u +%s)
+				next_wakeup_timestamp=$(YWakeUpSchedule -f '[result]' -r 127.0.0.1 "$yoctoPrefix".wakeUpSchedule"$n_sched" get_nextOccurence | sed -e 's/[[:space:]].*//')
 				delta=$(( "$next_wakeup_timestamp" - "$yocto_timestamp" ))
-				log_info "Next Yocto wakeup is scheduled on $(date -d @$next_wakeup_timestamp '+%Y/%m/%d %H:%M:%S') UTC$utc_offset (in $delta s)"
+				if [ "$next_wakeup_timestamp" = 0 ]; then
+					log_debug "Next schedule $n_sched wakeup: disabled"
+				else
+					log_debug "Next schedule $n_sched wakeup: $(date -d @$next_wakeup_timestamp '+%Y/%m/%d %H:%M:%S') UTC$utc_offset (in $delta s)"
+				fi
+			done
+		fi ## Log Yocto schedules
 
-				## log next wakeup of all schedules at debug loglevel
-				for n_sched in 1 2 3; do
-					## Yocto-Pictor-Wifi has only two schedules
-					if [[ ${is_yocto_pictor_wifi-} == 1 && $n_sched == 3 ]]; then
-						break
-					fi
+		## Log Yocto WDT
+		max_wakeup_time=$(YWakeUpMonitor -f '[result]' -r 127.0.0.1 "$yoctoPrefix".wakeUpMonitor get_powerDuration)
 
-					next_wakeup_timestamp=$(YWakeUpSchedule -f '[result]' -r 127.0.0.1 "$yoctoPrefix".wakeUpSchedule"$n_sched" get_nextOccurence | sed -e 's/[[:space:]].*//')
-					delta=$(( "$next_wakeup_timestamp" - "$yocto_timestamp" ))
-					if [ "$next_wakeup_timestamp" = 0 ]; then
-						log_debug "Next schedule $n_sched wakeup: disabled"
-					else
-						log_debug "Next schedule $n_sched wakeup: $(date -d @$next_wakeup_timestamp '+%Y/%m/%d %H:%M:%S') UTC$utc_offset (in $delta s)"
-					fi
-				done
-			fi ## Log Yocto schedules
-
-			## Log Yocto WDT
-			max_wakeup_time=$(YWakeUpMonitor -f '[result]' -r 127.0.0.1 "$yoctoPrefix".wakeUpMonitor get_powerDuration)
-
-			if [ "$max_wakeup_time" = 0 ]; then
-				log_debug "Yocto Auto-Power-Off is disabled"
-			else
-				log_debug "Yocto Auto-Power-Off is set to $max_wakeup_time s"
-			fi
-		fi # log next scheduled yocto wakeup if yocto command line API is installed
-	fi # [[ "$bypassYocto" != "yes" ]]
+		if [ "$max_wakeup_time" = 0 ]; then
+			log_debug "Yocto Auto-Power-Off is disabled"
+		else
+			log_debug "Yocto Auto-Power-Off is set to $max_wakeup_time s"
+		fi
+	fi # log next scheduled yocto wakeup if yocto command line API is installed
 
 	# check minimum uptime
 	if [[ "$keepPc" == "off" ]]; then
@@ -289,71 +295,20 @@ shutdown_sequence() {
 		if [[ "${sleepLocked-}" == 1 ]]; then
 			log_error "Power off has been inhibited by sleep.lock file in the hypernets_tools folder"
 			log_error "Remove the sleep.lock file to enable sending yocto to sleep and powering off the PC"
+
+			# Warn if Yocto Watchdog is enabled
+			if [[ $(command -v YWakeUpMonitor) ]]; then
+				sleep_countdown=$(YWakeUpMonitor -f '[result]' -r 127.0.0.1 $yoctoPrefix get_sleepCountdown)
+				if [[ $sleep_countdown -ne 0 ]]; then
+					log_warning "Yocto watchdog will power off the system in $sleep_countdown seconds!"
+				fi
+			fi
 		fi
 
 	    # Cause systemd service exit 1 and doesn't execute SuccessAction=poweroff
 	    exit 1
 	fi
-}
-
-
-
-debug_yocto(){
-	log_debug "Check if Yocto-Pictor is in (pseudo) deep-sleep mode..."
-
-	# check if Yocto command line API is installed
-	if [[ ! $(command -v YModule) ]]; then
-		log_warning "Yocto API is not installed"
-		return 0
-	fi
-
-	yocto_wakeup_state=$(YWakeUpMonitor -f '[result]' -r 127.0.0.1 $yoctoPrefix get_wakeUpState)
-
-	if [[ ! $? -eq 0 ]] ; then
-		log_error "Failed to get Yocto-Pictor wake-up state !"
-		return 0
-	fi
-
-	log_debug "Yocto-Pictor wake-up state : $yocto_wakeup_state"
-
-	if [[ $yocto_wakeup_state == "SLEEPING" ]] ; then
-		log_info "Awaking Yocto-Pictor..."
-		YWakeUpMonitor -f '[result]' -r 127.0.0.1 $yoctoPrefix wakeUp > /dev/null
-		if [[ ! $? -eq 0 ]] ; then
-			log_error "Failed to wake up the Yocto-Pictor !"
-			return 0
-		fi
-		sleep 5
-	fi
-
-	set +e
-	last_boot_timestamp=$(journalctl -b --output-fields=__REALTIME_TIMESTAMP -o export | grep -m 1 __REALTIME_TIMESTAMP | sed -e 's/.*=//')
-	set -e
-
-	## truncate microseconds
-	last_boot_timestamp=${last_boot_timestamp::-6}
-
-	logNameBase=$(date +"%Y-%m-%d-%H%M" -d @$last_boot_timestamp)
-	YMFolder=$(date +"%Y/%m" -d @$last_boot_timestamp)
-
-	## create LOG folder if it does not exist already
-	mkdir -p LOGS/$YMFolder/
-
-	suffixeName=""
-	for i in {001..999}; do
-		if [ -f "LOGS/$YMFolder/${logNameBase}${suffixeName}-yocto.log" ] || \
-		   [ -f "ARCHIVE/LOGS/$YMFolder/${logNameBase}${suffixeName}-yocto.log" ]; then
-			log_warning "Yocto log already exists! ($i)"
-			suffixeName="-$i"
-		else
-			logNameBase="${logNameBase}${suffixeName}"
-			break
-		fi
-	done
-
-	log_info "Saving Yocto debug info into LOGS/$YMFolder/${logNameBase}-yocto.log"
-	YModule -r 127.0.0.1 showDebugInformation > "LOGS/$YMFolder/${logNameBase}-yocto.log" 2>&1
-} # debug_yocto()
+} # shutdown_sequence()
 
 
 log_schedule(){
@@ -520,7 +475,7 @@ set -e
 if [[ "$bypassYocto" != "yes" ]] ; then
 
     if [[ "$debugYocto" == "yes" ]] ; then
-        debug_yocto
+        utils/dump_yocto_logs.sh
     fi
 
 	# Ensure Yocto is online
