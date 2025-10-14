@@ -1,3 +1,6 @@
+Version 3.2.2: (2025-10-14)
+	- bypass_yocto bugfixes
+
 Version 3.2.1: (2025-09-29)
 	- warn if sleep.lock exists and yocto watchdog is enabled
 	- don't update PC clock from yocto GPS if Yocto RTC and GPS timestamps

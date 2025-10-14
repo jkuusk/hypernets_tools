@@ -743,8 +743,8 @@ exit_actions() {
 			## 37 - MUX and/or SWIR+TEC not available
 			## 78 - VM stabilisation failed
 			## power cycle, otherwise the second attempt fails as well
-			if [ $return_value -eq 6 ] || [ $return_value -eq 37 ] || \
-					[ $return_value -eq 78 ]; then
+			if [[ "$bypassYocto" != "yes" ]] && ([ $return_value -eq 6 ] || \
+					[ $return_value -eq 37 ] || [ $return_value -eq 78 ]); then
 				echo "[INFO]  Power cycling the radiometer"
 				python -m hypernets.yocto.relay -soff -n3
 				sleep 10
@@ -761,8 +761,10 @@ exit_actions() {
 
 				## 27 - Radiometer is not responding
 				## log yocto env sensors (RH inside host unit)
-				if [ $return_value -eq 27 ]; then
-					log_info "Yocto meteo: $(python -m hypernets.yocto.meteo | sed -E -e 's/\(|\)|\[|\]|\"//g' | sed -e "s/'//2g" | sed '-es/,//'{7..1..2})"
+				if [ $return_value -eq 27 ] && [[ "$bypassYocto" != "yes" ]]; then
+					log_info "Yocto meteo: $(python -m hypernets.yocto.meteo | \
+						sed -E -e 's/\(|\)|\[|\]|\"//g' | sed -e "s/'//2g" | \
+						sed '-es/,//'{7..1..2})"
 				fi
 			fi
 			set -e

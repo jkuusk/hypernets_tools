@@ -322,9 +322,8 @@ def run_sequence_file(sequence_file, instrument_port, instrument_br, # noqa C901
             continue
 
         info("-"*72)
+        skip_geometry = False
         if not instrument_standalone:
-            skip_geometry = False
-
             geometry.get_absolute_pan_tilt()
             info(f"--> Requested Position : {geometry}")
 
