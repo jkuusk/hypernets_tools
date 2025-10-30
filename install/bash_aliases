@@ -1800,7 +1800,16 @@ runseq()(
 		exit
 	fi
 
-	./utils/run_service.sh --test-run $@
+	logName=$(date +"%Y-%m-%d-%H%M-sequence.log")
+	YMFolder=$(date +"%Y/%m")
+	logFullPath=LOGS/$YMFolder/$logName
+
+	## create LOGS folder if it does not exist already
+	mkdir -p LOGS/$YMFolder/
+
+	./utils/run_service.sh --test-run $@ 2>&1 | tee $logFullPath
+
+	echo -e "\nThe log was saved to ${logFullPath}\n"
 ) # runseq()
 
 alias kill-service="sudo systemctl kill --signal=SIGKILL hypernets-sequence"
