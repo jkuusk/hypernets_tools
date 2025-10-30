@@ -1,3 +1,8 @@
+Version 3.3.0: (2025-10-30)
+	- schedule command line tool updates
+	-- show wake-up times for all schedules
+	-- show Yocto time zone when updating schedule
+
 Version 3.2.2: (2025-10-30)
 	- bypass_yocto bugfixes
 	- save runseq logs to file
