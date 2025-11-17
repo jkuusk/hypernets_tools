@@ -732,7 +732,7 @@ exit_actions() {
 
 		# There is no point in trying again in case of some errors:
 		# 30 - sequence file not found
-		# 40 - failed to get instrument instance (no hypstar_port device)
+		# 40 - Instrument port does not exist
 		# 88 - rainig
 		# 98 - Yocto watchdog timeout is imminent
 		if [ $return_value -ne 30 ] && [ $return_value -ne 40 ] && \
@@ -741,7 +741,7 @@ exit_actions() {
 
 			## 6 - instrunent failed to init comms
 			## 37 - MUX and/or SWIR+TEC not available
-			## 78 - VM stabilisation failed
+			## 78 - radiometer measurement failed
 			## power cycle, otherwise the second attempt fails as well
 			if [[ "$bypassYocto" != "yes" ]] && ([ $return_value -eq 6 ] || \
 					[ $return_value -eq 37 ] || [ $return_value -eq 78 ]); then

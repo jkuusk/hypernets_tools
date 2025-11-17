@@ -33,7 +33,7 @@ class HypstarHandler(Hypstar):
             HypstarHandler.wait_for_instrument_port(instrument_port)
         except Exception as e:
             error(f"{e}")
-            error("Failed to get instrument instance")
+            error("Instrument port does not exist")
             exit(40)
 
         if expect_boot_packet and not wait_for_instrument(port=instrument_port, 
