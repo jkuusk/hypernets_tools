@@ -322,9 +322,8 @@ def run_sequence_file(sequence_file, instrument_port, instrument_br, # noqa C901
             continue
 
         info("-"*72)
+        skip_geometry = False
         if not instrument_standalone:
-            skip_geometry = False
-
             geometry.get_absolute_pan_tilt()
             info(f"--> Requested Position : {geometry}")
 
@@ -404,17 +403,21 @@ def run_sequence_file(sequence_file, instrument_port, instrument_br, # noqa C901
                 env = instrument_instance.get_env_log(env_request)
                 # dump instrument environmental log at all log levels
                 force_log_info(env.get_csv_line())
+
+            except Exception as e:
+                # failure to retrieve envlog is not critical
+                error(f"Error : {e}")
+
+            try:
                 instrument_instance.take_request(request, path_to_file=output)
 
             except Exception as e:
-                if request.action == InstrumentAction.VALIDATION:
-                    error("LED source measurement failed, aborting sequence")
-                    if not instrument_standalone:
-                        park_to_nadir()
-                    exit(78) # exit code 78
-
+                # measurement failure is critical, abort the sequence
                 error(f"Error : {e}")
-                nb_error += 1
+                error("Measurement failed, aborting sequence")
+                if not instrument_standalone:
+                    park_to_nadir()
+                exit(78) # exit code 78
 
 
             flags_dict[f"$spectra_file{iter_line}.it_vnir"] = request.it_vnir

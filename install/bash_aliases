@@ -880,7 +880,17 @@ schedule() (
 				echo -e "Offset:\t\t$offset s"
 			fi
 
-			## calculate SZA
+			yocto_time=$(YRealTimeClock -f '[result]' -r 127.0.0.1 "$yoctowifibrd" get_dateTime)
+			yocto_timestamp=$(date -d "$yocto_time UTC" -u +%s)
+
+			next_wakeup_timestamp=$(YWakeUpSchedule -f '[result]' -r 127.0.0.1 "$yoctowifibrd".wakeUpSchedule"$n_sched" get_nextOccurence | sed -e 's/[[:space:]].*//')
+			delta=$(( "$next_wakeup_timestamp" - "$yocto_timestamp" ))
+			if [ "$next_wakeup_timestamp" = 0 ]; then
+				echo "Next schedule $n_sched wakeup: disabled"
+			else
+				echo "Next schedule $n_sched wakeup: $(date -d @$next_wakeup_timestamp '+%Y/%m/%d %H:%M:%S') UTC$utc_offset (in $delta s)"
+			fi
+## calculate SZA
 			if [[ "$first_h" != "" ]]; then
 				tz_offset_h=$(printf "%+d" $(("$yocto_offset" / 3600)))
 				tz_offset_m=$(printf "%+d" $(( ("$yocto_offset" - 3600 * "$tz_offset_h" ) / 60)))
@@ -979,9 +989,30 @@ EOF
 				yocto_timestamp=$(date -d "$yocto_time UTC" -u +%s)
 				delta=$(( "$next_wakeup_timestamp" - "$yocto_timestamp" ))
 				echo "    Next wake up is at:     $(date -d @$next_wakeup_timestamp '+%Y/%m/%d %H:%M:%S') UTC$utc_offset (in $delta s)"
+
+				## log next wakeup of all schedules
+				for n_sched in 1 2 3; do
+					## Yocto-Pictor-Wifi has only two schedules
+					if [[ ${is_yocto_pictor_wifi-} == 1 && $n_sched == 3 ]]; then
+						break
+					fi
+
+					next_wakeup_timestamp=$(YWakeUpSchedule -f '[result]' -r 127.0.0.1 "$yoctowifibrd".wakeUpSchedule"$n_sched" get_nextOccurence | sed -e 's/[[:space:]].*//')
+					delta=$(( "$next_wakeup_timestamp" - "$yocto_timestamp" ))
+					if [ "$next_wakeup_timestamp" = 0 ]; then
+						echo "    Next schedule $n_sched wakeup: disabled"
+					else
+						echo "    Next schedule $n_sched wakeup: $(date -d @$next_wakeup_timestamp '+%Y/%m/%d %H:%M:%S') UTC$utc_offset (in $delta s)"
+					fi
+				done
 			fi
 			
-			
+			## clear read buffer
+			set +e
+			read -s -t 0.1
+			ch=" "
+			set -e
+
 			echo  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
 			echo -n "Enter option: ${HL}"
 			echo "1 - adjust schedule 1 (standard)"
@@ -1002,7 +1033,7 @@ EOF
 			do
 				tput civis     # -- invisible #hide the cursor
 			
-				read -s -t 0.1 -n1 ch #don echo input, timeout after 0.1s, accept 1st keypress, put into var ch
+				read -s -t 0.1 -n1 -r ch #don't echo input, timeout after 0.1s, accept 1st keypress, put into var ch
 				if [ $? = 0 ] #read length is 0 after 0s timeout exit
 				then	
 					tput cup 6 0
@@ -1023,7 +1054,7 @@ EOF
 			set -e
 		fi
 		skipread=0
-		tput cup 15 1 
+		tput cup 18 1 
 		tput cnorm  
 		
 		
@@ -1049,6 +1080,7 @@ EOF
 			echo
 		
 			echo "${HL}                Yocto Schedule                 ${RESET_HL}"
+			echo "Yocto time zone is UTC$utc_offset"
 			echo  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ "
 			
 			
@@ -1182,11 +1214,11 @@ EOF
 				fieldlength=12
 				xc=35 #xvalue at end of field to blank from
 				i=0  #this is the position of the current letter in the string #12 #$((xc - fieldlength))
-				y=22
+				y=23
 				yy="$y" #reference y position
 				tput cup "$y" 0 #put cursor
 				echo "Select: <- ->    Toggle: \"|spacebar|\"    Done: \"Enter\"    Main Menu: \"M\"     " 
-				y=20
+				y=21
 				adjv="Adjust months:       "
 				fieldn=1
 				#Loop through adjustments, step to next field with D, 
@@ -1800,7 +1832,16 @@ runseq()(
 		exit
 	fi
 
-	./utils/run_service.sh --test-run $@
+	logName=$(date +"%Y-%m-%d-%H%M-sequence.log")
+	YMFolder=$(date +"%Y/%m")
+	logFullPath=LOGS/$YMFolder/$logName
+
+	## create LOGS folder if it does not exist already
+	mkdir -p LOGS/$YMFolder/
+
+	./utils/run_service.sh --test-run $@ 2>&1 | tee $logFullPath
+
+	echo -e "\nThe log was saved to ${logFullPath}\n"
 ) # runseq()
 
 alias kill-service="sudo systemctl kill --signal=SIGKILL hypernets-sequence"

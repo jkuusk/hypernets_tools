@@ -1,3 +1,14 @@
+Version 3.3.0: (2025-11-17)
+	- schedule command line tool updates
+	  -- show wake-up times for all schedules
+	  -- show Yocto time zone when updating schedule
+	- fix exit code 40 error message: Instrument port does not exist
+	- exit with code 78 for all failed captures, not only VM
+
+Version 3.2.2: (2025-10-30)
+	- bypass_yocto bugfixes
+	- save runseq logs to file
+
 Version 3.2.1: (2025-09-29)
 	- warn if sleep.lock exists and yocto watchdog is enabled
 	- don't update PC clock from yocto GPS if Yocto RTC and GPS timestamps
