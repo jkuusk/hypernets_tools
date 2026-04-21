@@ -57,7 +57,7 @@ set -e
 set +e
 ## disable services
 if [ "$ID" == "debian" ]; then
-	service_array=("bluetooth.service" "unattended-upgrades.service" "apt-daily.service" "apt-daily.timer" "apt-daily-upgrade.service" "apt-daily-upgrade.timer" "colord.service" "cups-browsed.service" "cups.service")
+	service_array=("bluetooth.service" "unattended-upgrades.service" "apt-daily.timer" "apt-daily.service" "apt-daily-upgrade.timer" "apt-daily-upgrade.service" "colord.service" "cups-browsed.service" "cups.service")
 
 	for srv in "${service_array[@]}"
 	do
@@ -138,7 +138,7 @@ do
 		added_groups=1
 	fi
 done
-if [[ "$added_groups" == 1 ]]; then echo -e "${XHL}\nLog out and back in for the change to take effect!${RESET_HL}"; fi
+if [[ "$added_groups" == 1 ]]; then echo -e "${XHL}\nLog out and back in for the change to take effect!\n${RESET_HL}"; fi
 
 
 ## Workaround for debian bug where occasionally the gsm modem interface has wwx* name with x being random mac address
