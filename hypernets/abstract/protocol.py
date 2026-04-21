@@ -108,7 +108,7 @@ class Protocol(list[(Geometry, list[Request])]):
                     # check if we have '#' in scan definition that is not a meta variable
                     # meta variables are allowed within geometry definition's square brackets
                     # str.find() does not use proper regexes, need re for that
-                    match = re.split("#(?!.*?\])", line)
+                    match = re.split(r"#(?!.*?\])", line)
                     if match:
                         # discard everything after comment sign
                         line = match[0]
