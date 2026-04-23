@@ -95,15 +95,18 @@ function auto_config_yocto(){
     'enter' to continue"
 	read
 
-	echo "Copying configuration files"
 	if [[ ! -f "config_static.ini" ]]; then
-        	echo "Copying the config_static.ini file as it does not exist"
+		echo "Copying the config_static.ini file as it does not exist"
 		sudo -u $SUDO_USER cp hypernets/resources/config_static.ini.template config_static.ini
+	else
+		echo "Keeping the existing config_static.ini"
 	fi
 
 	if [[ ! -f "config_dynamic.ini" ]]; then
         	echo "Copying the config_dynamic.ini file as it does not exist"
 		sudo -u $SUDO_USER cp hypernets/resources/config_dynamic.ini.template config_dynamic.ini
+	else
+		echo "Keeping the existing config_dynamic.ini"
 	fi
 
 	echo 

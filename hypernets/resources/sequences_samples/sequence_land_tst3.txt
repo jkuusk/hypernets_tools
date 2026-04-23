@@ -1,0 +1,11 @@
+HypernetsProtocol v2.0
+
+# This sequence is intended for functional testing of HYPSTAR-XR systems
+# It uses fixed integration times to allow indoor testing in low-light conditions
+# It is even shorter than sequence_land_tst.txt
+
+@[ 293.0, hyper, 180.0, hyper ] + 3.both.irr.256.512 + 3.both.dark.0.0 + 1.picture
+@[ 293.0, hyper, 30.0,  hyper ] + 3.both.rad.32.128 + 3.both.dark.0.0
+@[ 278.0, hyper, 0.0,   hyper ] + 3.both.rad.32.128 + 3.both.dark.0.0
+@[ 0.0,   sun,   0.0,   sun   ] + 1.picture
+@[ 293.0, hyper, 0.0,   hyper ]
