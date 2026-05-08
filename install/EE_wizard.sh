@@ -238,6 +238,7 @@ function setup_services(){
 		"Reverse ssh (hypernets-access.service)" # 3
 		"Webcams (hypernets-webcam.service)" # 4
 		"All of the above" # 5
+		"Return (do not configure anything)" # 6
     )
 	select opt in "${srv_options[@]}"
 	do
@@ -263,6 +264,9 @@ function setup_services(){
 				./install/05_setup_server_communication.sh
 				./install/06_setup_remote_access.sh
 				./install/CC_setup_webcams.sh
+				break
+				;;
+			"${srv_options[5]}") # "Return (do not configure anything)" # 6
 				break
 				;;
 			*)
