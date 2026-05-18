@@ -3,6 +3,13 @@
 set -o nounset
 set -euo pipefail
 
+## define text highlights
+HL=$(tput setaf 12) ## blue
+XHL=$(tput setaf 9) ## red
+BOLD=$(tput bold)
+GREEN=$(tput setaf 10)
+RESET_HL=$(tput sgr0) ## reset all text formatting
+
 
 # Bash menu script for hypernets_tools installation.
 function print_logo(){
@@ -21,7 +28,7 @@ function print_logo(){
 
 function check_sudo_user(){
 	if [[ $EUID -ne 0 ]]; then
-		echo "This script must be run as root, use sudo $0 instead"
+		echo "${XHL}This script must be run as root, use sudo $0 instead${RESET_HL}"
 		exit 1
 	fi
 }
@@ -34,7 +41,7 @@ function check_if_online(){
 			! ping -q -c 1 -W 1 google.com > /dev/null 2>&1 && \
 			! wget -q --spider http://google.com > /dev/null 2>&1
 	then
-		echo -e "\nError : please connect to internet.\n"
+		echo -e "\n${XHL}Error : please connect to internet.${RESET_HL}\n"
 		exit 1
 	fi
 	set -e
@@ -59,8 +66,8 @@ function update_repo(){
 	if sudo -u $SUDO_USER git diff --name-only "$before_sha" "$after_sha" -- install/bash_aliases | grep -q .; then
 		echo
 		echo
-		echo "*******  install/bash_aliases was updated by the pull.  *******"
-		echo "*******  Please run item 10) Setup command line tools   *******"
+		echo "${HL}*******  install/bash_aliases was updated by the pull.  *******"
+		echo "*******  Please run item 10) Setup command line tools   *******${RESET_HL}"
 		echo
 	fi
 
@@ -112,10 +119,36 @@ function auto_config_yocto(){
 	echo 
 	echo "Running auto config for config_static.ini..."
 
-	json_api=$(wget -O- http://127.0.0.1:4444/api.json 2> /dev/null)
+	set +e
 
-	yocto_ver=$(echo $json_api | python3 -c \
-		"import sys, json; print(json.load(sys.stdin)['services']['whitePages'][1]['productName'])")
+	json_api=$(wget -O- http://127.0.0.1:4444/api.json 2> /dev/null)
+	inventory=$(YModule -r 127.0.0.1 inventory)
+
+	if [ -z "$json_api" ]; then
+		echo -e "\n${XHL}Error : Failed to connect to Yocto." 
+		echo -e "Is Yocto Virtualhub installed and running?${RESET_HL}\n"
+		exit 1
+	fi
+
+
+        yocto_ver=$(printf '%s' "$json_api" | jq -r '
+                if (.services.whitePages | length) > 1
+                then .services.whitePages[1].productName
+		else error("whitePages has fewer than 2 items")
+                end
+        ' 2>/dev/null)
+
+        if [ $? -ne 0 ]; then
+		echo -e "\n${XHL}Error : did not find any connected Yocto boards."
+		echo -e "Check the Yocto USB connection"
+		echo -e "Is PC powered by relay override switch and Yocto is sleeping?\n"
+		echo -e "The list of modules found:"
+		echo "$inventory"
+		echo "${RESET_HL}"
+		exit 1
+        fi
+
+	set -e
 
 	if [[ "$yocto_ver" == "Yocto-Pictor-Wifi" ]]; then
 	# HYPSTAR host system V1-V3
@@ -130,8 +163,8 @@ function auto_config_yocto(){
 		yocto_id1=$(echo $json_api | python3 -c \
 			"import sys, json; print(json.load(sys.stdin)['services']['yellowPages']['HubPort'][1]['logicalName'])")
 
-		echo -e "\nFound host system V1-V3 using Yocto-Pictor-Wifi"
-		echo -e "Yocto IDs are : $yocto_id1, $yocto_id2 and $yocto_gps\n"
+		echo -e "\n${HL}Found host system V1-V3 using Yocto-Pictor-Wifi"
+		echo -e "Yocto IDs are : $yocto_id1, $yocto_id2 and $yocto_gps${RESET_HL}\n"
 
 		sudo -u $SUDO_USER sed -i -e '/^yocto_prefix1/s/OBSVLFR1-....../OBSVLFR1-'${yocto_id1:9:6}'/' config_static.ini
 		sudo -u $SUDO_USER sed -i -e '/^yocto_prefix2/s/OBSVLFR2-....../OBSVLFR2-'${yocto_id2:9:6}'/' config_static.ini
@@ -139,13 +172,42 @@ function auto_config_yocto(){
 		sudo -u $SUDO_USER sed -i -e '/^yocto_gps/s/YGNSSMK2-....../YGNSSMK2-'${yocto_gps:9:6}'/' config_static.ini
 	elif [[ "$yocto_ver" == "Yocto-Pictor-GPS" ]]; then
 	# HYPSTAR host system V4-...
+
 		yocto_id3=$(echo $json_api | python3 -c \
 			"import sys, json; print(json.load(sys.stdin)['services']['whitePages'][1]['serialNumber'])")
 
 		yocto_rtc_id="$yocto_id3"
 
-		yocto_id1=$(echo $json_api | python3 -c \
-			"import sys, json; print(json.load(sys.stdin)['services']['whitePages'][2]['serialNumber'])")
+		set +e
+
+		yocto_id1=$(printf '%s' "$json_api" | jq -r '
+		if (.services.whitePages | length) > 2
+		  then .services.whitePages[2].serialNumber
+		  else error("whitePages has fewer than 3 items")
+		  end
+		' 2>/dev/null)
+
+	        if [ $? -ne 0 ]; then
+			echo -e "\n${XHL}Error : found only one connected Yocto board.\n"
+
+			echo -e "Check the 4-pin connection between the upper and lower Yocto boards.\n"
+
+			echo -e "Check if brown-out protection is triggered:"
+			alert_lvl=$(YThreshold -f '[result]' -r 127.0.0.1 $yocto_id3 get_alertLevel)
+			safe_lvl=$(YThreshold -f '[result]' -r 127.0.0.1 $yocto_id3 get_safeLevel)
+			cur_state=$(YThreshold -f '[result]' -r 127.0.0.1 $yocto_id3 get_thresholdState)
+			volt_cur=$(YVoltage -f '[result]' -r 127.0.0.1 $yocto_id3 get_currentValue)
+			volt_unit=$(YVoltage -f '[result]' -r 127.0.0.1 $yocto_id3 get_unit)
+			echo -e "Brown-out protection trigger/restore limits: $alert_lvl V / $safe_lvl V"
+			echo -e "Supply voltage is $volt_cur $volt_unit, current state is $cur_state\n"
+
+			echo -e "The list of modules found:"
+			echo "$inventory"
+			echo "${RESET_HL}"
+			exit 1
+	        fi
+
+		set -e
 
 		echo -e "\nFound host system V4 or newer using Yocto-Pictor-GPS"
 		echo -e "Yocto IDs are : $yocto_id1 and $yocto_id3\n"
@@ -156,7 +218,7 @@ function auto_config_yocto(){
 		sudo -u $SUDO_USER sed -i '/yocto_gps [-=]/d' config_static.ini
 	else
 	# Something is wrong
-		echo -e "\nError : failed to autodetect the Yocto boards.\n"
+		echo -e "\n${XHL}Error : failed to autodetect the Yocto boards.${RESET_HL}\n"
 		exit 1
 	fi
 
@@ -164,7 +226,7 @@ function auto_config_yocto(){
 	sudo -u $(logname) python -m hypernets.yocto.relay -p on -n 1 -f
 	echo
 
-	echo "****** You should now edit the configuration files before continuing with the configuration ******"
+	echo "${HL}****** You should now edit the configuration files before continuing with the configuration ******${RESET_HL}"
 	echo
 }
 
@@ -238,7 +300,6 @@ function setup_services(){
 		"Reverse ssh (hypernets-access.service)" # 3
 		"Webcams (hypernets-webcam.service)" # 4
 		"All of the above" # 5
-		"Return (do not configure anything)" # 6
     )
 	select opt in "${srv_options[@]}"
 	do
@@ -264,9 +325,6 @@ function setup_services(){
 				./install/05_setup_server_communication.sh
 				./install/06_setup_remote_access.sh
 				./install/CC_setup_webcams.sh
-				break
-				;;
-			"${srv_options[5]}") # "Return (do not configure anything)" # 6
 				break
 				;;
 			*)
@@ -367,7 +425,7 @@ while true; do
 				break
 				;;
 			*)
-				echo -e "\nInvalid choice!\n"
+				echo -e "\n${XHL}Invalid choice!${RESET_HL}\n"
 				break
 				;;
 		esac

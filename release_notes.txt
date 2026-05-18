@@ -1,6 +1,8 @@
 Version 3.3.2: (2026-05-08)
 	- add option to return without configuring any services to item 11 of 
 	  the install wizard
+	- improve error handling of yocto auto-conf in the install wizard
+	- promote failure to read pan-tilt final position from warning to error
 
 Version 3.3.1: (2026-04-23)
 	- Fix regex warning for Python 3.13
