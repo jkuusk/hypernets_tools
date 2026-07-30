@@ -31,26 +31,49 @@ debug_yocto = no
 
 #########################################################################
 [network]
-# credentials - the ssh credentials of the network server
-credentials = user@server
+# primary_server_credentials and secondary_server_credentials - the ssh 
+# credentials of the primary and secondary network server. For backwards 
+# compatibility credentials is also accepted as the primary_server_credentials 
+# parameter name. 
+#
+# If only one server is used, comment out secondary_server_credentials
+primary_server_credentials = user@server
+#secondary_server_credentials = user@server
 
-# remote_dir - the remote directory at the network server where to sync config
-# and data
+# primary_server_ssh_port and secondary_server_ssh_port - the ssh port number
+# of the primary and secondary network server. For backwards compatibility
+# ssh_port is also accepted as the primary_server_ssh_port parameter name. 
+primary_server_ssh_port = 22
+secondary_server_ssh_port = 22
+
+# primary_server_remote_dir and secondary_server_remote_dir - the remote
+# directory at the primary and secondary network server where to sync config
+# and data. For backwards compatibility remote_dir is also accepted as the
+# primary_server_remote_dir parameter name.
 # 
 # hypernets_hello.service uploads DATA/ OTHER/ and LOGS/ folders to the network
 # server and bidirectionally synchronises the confid_dynamic.ini with the
-# server (whichever has the newer file)
-remote_dir = ~
+# server (whichever has the newer file). 
+#
+# The upload to the secondary server starts after synchronization with the
+# primary server is complete. Synchronization is disabled for any server for
+# which the remote_dir parameter is commented out or missing.
+primary_server_remote_dir = ~
+secondary_server_remote_dir = ~
 
-# ssh_port - the ssh port number of the network server
-ssh_port = 22
-
-# remote_ssh_port - the port number at the network server for reverse ssh tunnel
+# primary_server_remote_ssh_port and secondary_server_remote_ssh_port - the
+# port number at the primary and secondary network server for reverse ssh
+# tunnel.  For backwards compatibility remote_ssh_port is also accepted as the
+# primary_server_remote_ssh_port parameter name.
 # Allowed values: [1024...49151]
 #
-# Remote ssh port must be unused on the network server and unique for each site 
-# connected to the same server
-remote_ssh_port = unique_for_each_site
+# Remote ssh port must be unused on the network server and unique for each site
+# connected to the same server.
+#
+# Establishing a reverse ssh tunnel is disabled for any server for which the
+# remote_ssh_port parameter is commented out or missing.
+primary_server_remote_ssh_port = unique_for_each_site
+secondary_server_remote_ssh_port = unique_for_each_site
 
 # ssh_loglevel - the verbosity of the reverse ssh tunnel client
 # Allowed values: ERROR, DEBUG, DEBUG2, DEBUG3

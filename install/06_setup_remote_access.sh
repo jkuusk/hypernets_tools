@@ -15,47 +15,73 @@ if [[ ${PWD##*/} != "hypernets_tools"* ]]; then
 	exit 1
 fi
 
-
+# Read config file :
 source utils/configparser.sh
 
-sshPort=$(parse_config "ssh_port" config_static.ini)
-credentials=$(parse_config "credentials" config_static.ini)
-remoteSSHPort=$(parse_config "remote_ssh_port" config_static.ini)
+load_reverse_ssh_server_config primary primary_ipServer primary_sshPort primary_remoteSSHPort primary_configured
+load_reverse_ssh_server_config secondary secondary_ipServer secondary_sshPort secondary_remoteSSHPort secondary_configured
 
-if [ -z $remoteSSHPort ]; then
-	remoteSSHPort="20213"
-fi
-
-if [ -z $sshPort ]; then
-	sshPort="22"
-fi
+two_servers_configured=false
+$primary_configured && $secondary_configured && two_servers_configured=true
 
 echo
-echo "Read from config_static.ini : "
-echo " * Server credentials : $credentials"
-echo " * SSH port           : $sshPort"
-echo " * Remote SSH port   : $remoteSSHPort"
-read -p "   Confirm (y/n) ?" -rn1
+echo "Read from config_static.ini :"
+
+if $primary_configured; then
+    echo "Primary server:"
+    echo " * Server credentials : $primary_ipServer"
+    echo " * SSH port           : $primary_sshPort"
+    echo " * Remote SSH port    : $primary_remoteSSHPort"
+    echo
+fi
+
+if $secondary_configured; then
+    echo "Secondary server:"
+    echo " * Server credentials : $secondary_ipServer"
+    echo " * SSH port           : $secondary_sshPort"
+    echo " * Remote SSH port    : $secondary_remoteSSHPort"
+    echo
+fi
+
+if ! $primary_configured && ! $secondary_configured; then
+    echo "No reverse SSH server is configured."
+    exit 1
+fi
+
+read -p "   Confirm (y/n) ? " -rn1
 echo
 
-if [[ $REPLY =~ ^[Yy]$ ]]; then 
-	echo
-	user="$SUDO_USER"
-	path_to_service=$(echo "$PWD/utils/reverse_ssh.sh" | sed 's/\//\\\//g')
-	path_to_h_tools=$(echo "$PWD" | sed 's/\//\\\//g')
-	service_file="/etc/systemd/system/hypernets-access.service"
+if [[ $REPLY =~ ^[Yy]$ ]]; then
 
-	cp "./install/hypernets-access.service"  $service_file
+    echo
+    user="$SUDO_USER"
+    path_to_service=$(echo "$PWD/utils/reverse_ssh.sh" | sed 's/\//\\\//g')
+    path_to_h_tools=$(echo "$PWD" | sed 's/\//\\\//g')
+    service_file="/etc/systemd/system/hypernets-access.service"
 
-	sed -i '/User=$/s/$/'$user'/' $service_file
-	sed -i '/ExecStart=$/s/$/'$path_to_service'/' $service_file
-	sed -i '/WorkingDirectory=$/s/$/'$path_to_h_tools'\//' $service_file
+    cp "./install/hypernets-access.service" "$service_file"
 
-	chmod 644 $service_file
+    sed -i '/User=$/s/$/'"$user"'/' "$service_file"
+    sed -i '/ExecStart=$/s/$/'"$path_to_service"'/' "$service_file"
+    sed -i '/WorkingDirectory=$/s/$/'"$path_to_h_tools"'\\/' "$service_file"
 
-	systemctl enable hypernets-access
-	systemctl start hypernets-access
+    chmod 644 "$service_file"
+
+    systemctl daemon-reload
+    systemctl enable hypernets-access
+    systemctl start hypernets-access
+
+    echo
+    echo "Configured reverse SSH tunnel endpoints:"
+
+    if $primary_configured; then
+        echo " * Primary   : $primary_ipServer (SSH:$primary_sshPort, Remote:$primary_remoteSSHPort)"
+    fi
+
+    if $secondary_configured; then
+        echo " * Secondary : $secondary_ipServer (SSH:$secondary_sshPort, Remote:$secondary_remoteSSHPort)"
+    fi
 
 else
-	echo "Exit"
+    echo "Exit"
 fi
