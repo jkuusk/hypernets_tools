@@ -279,7 +279,7 @@ sync_data() {
 
 	# finally sync only meteo.csv from CUR folders and delete the folders after successful transfer
 	# exclude CUR folders from current day to avoid interfering with ongoing sequence
-	echo "[INFO]  Syncing uncompled (CUR) sequence meteo.csv..."
+	echo "[INFO]  Syncing uncompled (CUR) sequence meteo.csv to $server server..."
 	rsync -e "ssh -p $sshPort" -am $rsync_loglevel $rsync_chmod --remove-source-files \
 			--exclude "SEQ*" --exclude "$(date +'CUR%Y%m%dT*')" --include "*/" \
 			--include "meteo.csv" --exclude "*" "$rootFolder/DATA" "$ipServer:$remoteDir" && \
@@ -357,13 +357,8 @@ if [ -z $autoUpdate ]; then
 	autoUpdate="no"
 fi
 
-# Add also to secondary queue if upload to two servers is configured
-if $two_servers_configured; then
-    two_sever_txt=" and secondary server queue"
-fi
-
 # Archive DATA
-echo "[INFO]  Linking data to archive${two_sever_txt:-}..."
+echo "[INFO]  Linking data to archive..."
 for folderPath in $(find DATA -type d -regextype posix-extended -regex ".*/(CUR|SEQ)[0-9]{8}T[0-9]{6}"); do
 	seqname=$(basename $folderPath)
 	year="${seqname:3:4}"
@@ -373,16 +368,10 @@ for folderPath in $(find DATA -type d -regextype posix-extended -regex ".*/(CUR|
 
 	mkdir -p "$yearMonthDayArchive"
 	cp -Raulf "$folderPath" "$yearMonthDayArchive"
-
-	if $two_servers_configured; then
-		yearMonthDaySecondary="secondary_queue/DATA/$year/$month/$day/"
-		mkdir -p "$yearMonthDaySecondary"
-		cp -Raulf "$folderPath" "$yearMonthDaySecondary"
-	fi
 done
 
 # Archive LOGS
-echo "[INFO]  Linking logs to archive${two_sever_txt:-}..."
+echo "[INFO]  Linking logs to archive..."
 for fileLog in $(find LOGS -type f -regextype posix-extended -regex ".*/[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{4}(-[0-9]{3})?-[a-z]+.log"); do
   	year="${fileLog:5:4}"
   	month="${fileLog:10:2}"
@@ -390,16 +379,10 @@ for fileLog in $(find LOGS -type f -regextype posix-extended -regex ".*/[0-9]{4}
 
   	mkdir -p "$yearMonthArchive"
 	cp -aulf "$fileLog" "$yearMonthArchive"
-
-	if $two_servers_configured; then
-		yearMonthSecondary="secondary_queue/LOGS/$year/$month/"
-		mkdir -p "$yearMonthSecondary"
-		cp -aulf "$fileLog" "$yearMonthSecondary"
-	fi
 done
 
 # Archive Webcam images
-echo "[INFO]  Linking webcam images to archive${two_sever_txt:-}..."
+echo "[INFO]  Linking webcam images to archive..."
 for imgfile in $(find OTHER/ -type f -regextype posix-extended -regex "OTHER/WEBCAM_(SITE|SKY)/.*[0-9]{8}T[0-9]{6}.jpg"); do
 	filename="$(basename $imgfile)"
 	year="${filename:0:4}"
@@ -409,17 +392,25 @@ for imgfile in $(find OTHER/ -type f -regextype posix-extended -regex "OTHER/WEB
 
 	mkdir -p "$yearMonthArchive"
 	cp -aulf "$imgfile" "$yearMonthArchive"
-
-	if $two_servers_configured; then
-		yearMonthSecondary="secondary_queue/OTHER/$camfolder/$year/$month/"
-		mkdir -p "$yearMonthSecondary"
-		cp -aulf "$imgfile" "$yearMonthSecondary"
-	fi
 done
 
+set +e
+
+# Link to secondary queue
+if $two_servers_configured; then
+	mkdir -p SECONDARY_QUEUE
+
+	echo "[INFO]  Linking DATA to secondary queue..."
+	cp -Raulf DATA/ SECONDARY_QUEUE/
+
+	echo "[INFO]  Linking LOGS to secondary queue..."
+	cp -Raulf LOGS/ SECONDARY_QUEUE/
+
+	echo "[INFO]  Linking OTHER to secondary queue..."
+	cp -Raulf OTHER/ SECONDARY_QUEUE/
+fi
 
 # Wait until we have connection with either the primary or secondary server
-set +e
 echo "[INFO]  Waiting for network..."
 primary_ipServer_ip=$(cut -d "@" -f2 <<< $primary_ipServer)
 secondary_ipServer_ip=$(cut -d "@" -f2 <<< $secondary_ipServer)
@@ -454,12 +445,12 @@ source utils/bidirectional_sync.sh
 
 if $primary_configured; then
 	bidirectional_sync "config_dynamic.ini" \
-		"primary_$ipServer" "$primary_remoteDir/config_dynamic.ini.$USER" "$primary_sshPort"
+		"$primary_ipServer" "$primary_remoteDir/config_dynamic.ini.$USER" "$primary_sshPort"
 fi
 
 if $secondary_configured; then
 	bidirectional_sync "config_dynamic.ini" \
-		"secondary_$ipServer" "$secondary_remoteDir/config_dynamic.ini.$USER" "$secondary_sshPort"
+		"$secondary_ipServer" "$secondary_remoteDir/config_dynamic.ini.$USER" "$secondary_sshPort"
 fi
 
 
@@ -478,9 +469,9 @@ if $two_servers_configured; then
     sync_logs "primary" "$primary_sshPort" "$primary_ipServer" "$primary_remoteDir" "."
     sync_other "primary" "$primary_sshPort" "$primary_ipServer" "$primary_remoteDir" "."
 
-    sync_data "secondary" "$secondary_sshPort" "$secondary_ipServer" "$secondary_remoteDir" "secondary_queue"
-    sync_logs "secondary" "$secondary_sshPort" "$secondary_ipServer" "$secondary_remoteDir" "secondary_queue"
-    sync_other "secondary" "$secondary_sshPort" "$secondary_ipServer" "$secondary_remoteDir" "secondary_queue"
+    sync_data "secondary" "$secondary_sshPort" "$secondary_ipServer" "$secondary_remoteDir" "SECONDARY_QUEUE"
+    sync_logs "secondary" "$secondary_sshPort" "$secondary_ipServer" "$secondary_remoteDir" "SECONDARY_QUEUE"
+    sync_other "secondary" "$secondary_sshPort" "$secondary_ipServer" "$secondary_remoteDir" "SECONDARY_QUEUE"
 elif $primary_configured; then
     sync_data "primary" "$primary_sshPort" "$primary_ipServer" "$primary_remoteDir" "."
     sync_logs "primary" "$primary_sshPort" "$primary_ipServer" "$primary_remoteDir" "."

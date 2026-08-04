@@ -36,7 +36,11 @@ load_data_server_config() {
     local -n ipServer="$2"
     local -n sshPort="$3"
     local -n remoteDir="$4"
-	local -n configured="$5"
+    local -n configured="$5"
+
+    ipServer=""
+    sshPort="22"
+    remoteDir=""
 
     ipServer=$(parse_config "${prefix}_server_credentials" config_static.ini)
     sshPort=$(parse_config "${prefix}_server_ssh_port" config_static.ini)
@@ -48,10 +52,11 @@ load_data_server_config() {
         : "${remoteDir:=$(parse_config "remote_dir" config_static.ini)}"
     fi
 
-    : "${sshPort:=22}"
-
-    configured=false
-    [[ -n "$ipServer" && -n "$remoteDir" ]] && configured=true
+    if [[ -n "$ipServer" && -n "$remoteDir" ]]; then
+        configured=true
+    else
+        configured=false
+    fi
 }
 
 
@@ -60,7 +65,11 @@ load_reverse_ssh_server_config() {
     local -n ipServer="$2"
     local -n sshPort="$3"
     local -n remoteSSHPort="$4"
-	local -n configured="$5"
+    local -n configured="$5"
+
+    ipServer=""
+    sshPort="22"
+    remoteSSHPort=""
 
     ipServer=$(parse_config "${prefix}_server_credentials" config_static.ini)
     sshPort=$(parse_config "${prefix}_server_ssh_port" config_static.ini)
@@ -72,9 +81,9 @@ load_reverse_ssh_server_config() {
         : "${remoteSSHPort:=$(parse_config "remote_ssh_port" config_static.ini)}"
     fi
 
-    : "${sshPort:=22}"
-    : "${remoteSSHPort:=20213}"
-
-    configured=false
-    [[ -n "$ipServer" && -n "$remoteSSHPort" ]] && configured=true
+    if [[ -n "$ipServer" && -n "$remoteSSHPort" ]]; then
+        configured=true
+    else
+        configured=false
+    fi
 }

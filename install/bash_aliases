@@ -18,17 +18,6 @@ commands() (
 	load_data_server_config primary primary_ipServer primary_sshPort primary_remoteDir primary_configured
 	load_data_server_config secondary secondary_ipServer secondary_sshPort secondary_remoteDir secondary_configured
 
-	two_servers_configured=false
-	$primary_configured && $secondary_configured && two_servers_configured=true
-
-	if $primary_configured; then
-	    display_ipServer="$primary_ipServer"
-	    display_remoteDir="$primary_remoteDir"
-	else
-	    display_ipServer="$secondary_ipServer"
-	    display_remoteDir="$secondary_remoteDir"
-	fi
-
 	echo
 	if [[ "$duchk" -ge 80 ]]
 	then
@@ -49,7 +38,7 @@ commands() (
 	echo "${HL} status  	${RESET_HL}sudo systemctl status hypernets-sequence"
 	echo "${HL} kill-service	${RESET_HL}kill hypernets-sequence service without going to sleep"
 	echo "${HL} journal  	${RESET_HL}journalctl -b -u hypernets-sequence -e (journal -f to follow)"
-	echo "${HL} portal      ${RESET_HL}makes a portal via ~/Portal folder to ${display_ipServer}:${display_remoteDir%/}/"
+	echo "${HL} portal		${RESET_HL}makes a portal via ~/Portal folder    portal -h for help"
 	echo "${HL} gui		${RESET_HL}python -m hypernets.gui (if screen attached)"
 	echo "${HL} webpic 	${RESET_HL}take webcam photo    webpic -h for help"
 	echo "${HL} hypypic  	${RESET_HL}take photo from hypstar camera"
@@ -1845,12 +1834,11 @@ portal()(
 	two_servers_configured=false
 	$primary_configured && $secondary_configured && two_servers_configured=true
 
-	if [[ "${1-}" == "-h" ]] || [[ "${1-}" == "--help" ]]
-	then
+	print_help() {
 	    echo
 	    echo "portal [-h|--help] [primary|secondary|close]"
 	    echo
-	    echo "Open or close sshfs portals to configured remote servers."
+	    echo "Open or close sshfs portal(s) to configured remote server(s)."
 	    echo
 	    echo "portal            open portal(s) using configured server(s)"
 	    echo "                  one server configured  -> ~/Portal"
@@ -1869,8 +1857,21 @@ portal()(
 	    echo
 	    echo "portal close      close all open portals (~/Portal and ~/Portal2)"
 	    echo
-	    exit
-	fi
+	}
+
+	case "${1-}" in
+	    ""|primary|secondary|close)
+	        ;;
+	    -h|--help)
+	        print_help
+	        exit 0
+	        ;;
+	    *)
+	        echo "${XHL}Invalid option: $1${RESET_HL}"
+	        print_help
+	        exit 1
+	        ;;
+	esac
 
 	open_portal() {
         local portal_dir="$1"

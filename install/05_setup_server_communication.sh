@@ -15,6 +15,33 @@ if [[ ${PWD##*/} != "hypernets_tools"* ]]; then
 	exit 1
 fi
 
+update_ssh_config_host() {
+    local ssh_config="$1"
+    local host="$2"
+    local port="$3"
+    local identity_file="$4"
+
+    touch "$ssh_config"
+
+    awk -v host="$host" '
+    BEGIN { skip=0 }
+    $1 == "Host" {
+        skip = ($2 == host)
+    }
+    !skip { print }
+    ' "$ssh_config" > "${ssh_config}.tmp" &&
+    mv "${ssh_config}.tmp" "$ssh_config"
+
+    cat >> "$ssh_config" << EOF
+
+Host $host
+    Port $port
+    IdentityFile $identity_file
+
+EOF
+}
+
+
 # Read config file :
 source utils/configparser.sh
 
@@ -54,6 +81,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
 
     primary_key="/home/$user/.ssh/id_rsa"
     secondary_key="/home/$user/.ssh/id_rsa_secondary"
+    ssh_config="/home/$user/.ssh/config"
 
     #
     # Create primary key (backward-compatible)
@@ -74,17 +102,20 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     fi
 
     #
-    # Copy primary key
+    # Copy primary key and add to ssh config
     #
     if $primary_configured; then
 
         echo
-		read -p "Copy SSH key to primary serve ? \n (RBINS server : no / other servers : yes): " -rn1
+		read -p "Copy SSH key to primary server? (RBINS server : no / other servers : yes): " -rn1
         echo
 
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             sudo -u "$user" ssh-copy-id -i "$primary_key" -p "$primary_sshPort" "$primary_ipServer"
         fi
+
+		primary_ipServer_ip=$(cut -d "@" -f2 <<< $primary_ipServer)
+		update_ssh_config_host "$ssh_config" "$primary_ipServer_ip" "$primary_sshPort" "$primary_key"
     fi
 
     #
@@ -93,13 +124,16 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     if $secondary_configured; then
 
         echo
-		read -p "Copy SSH key to secondary serve ? \n (RBINS server : no / other servers : yes): " -rn1
+		read -p "Copy SSH key to secondary server? (RBINS server : no / other servers : yes): " -rn1
         echo
 
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             sudo -u "$user" ssh-copy-id -i "$secondary_key" -p "$secondary_sshPort" "$secondary_ipServer"
         fi
-    fi
+
+		secondary_ipServer_ip=$(cut -d "@" -f2 <<< $secondary_ipServer)
+		update_ssh_config_host "$ssh_config" "$secondary_ipServer_ip" "$secondary_sshPort" "$secondary_key"
+     fi
 
     path_to_service=$(echo "$PWD/utils/hello_server.sh" | sed 's/\//\\\//g')
     path_to_h_tools=$(echo "$PWD" | sed 's/\//\\\//g')
@@ -110,13 +144,17 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
 
     sed -i '/User=$/s/$/'"$user"'/' "$service_file"
     sed -i '/ExecStart=$/s/$/'"$path_to_service"'/' "$service_file"
-    sed -i '/WorkingDirectory=$/s/$/'"$path_to_h_tools"'\\/' "$service_file"
+    sed -i '/WorkingDirectory=$/s/$/'"$path_to_h_tools"'\//' "$service_file"
 
     chmod 644 "$service_file"
 
     systemctl daemon-reload
     systemctl enable hypernets-hello
     systemctl start hypernets-hello
+
+    exit 0
 else
     echo "Exit"
+
+    exit 1
 fi

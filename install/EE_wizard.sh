@@ -300,7 +300,11 @@ function setup_services(){
 		"Reverse ssh (hypernets-access.service)" # 3
 		"Webcams (hypernets-webcam.service)" # 4
 		"All of the above" # 5
+		"Return (do not configure anything)" # 6
     )
+
+	set +e
+
 	select opt in "${srv_options[@]}"
 	do
 		case $opt in 
@@ -327,6 +331,9 @@ function setup_services(){
 				./install/CC_setup_webcams.sh
 				break
 				;;
+			"${srv_options[5]}") # "Return (do not configure anything)" # 6
+				break
+				;;
 			*)
 				echo -e "\nInvalid choice!\n"
 				break
@@ -334,6 +341,7 @@ function setup_services(){
 		esac
 	done
 
+	set -e
 }
 
 
