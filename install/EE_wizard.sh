@@ -302,6 +302,9 @@ function setup_services(){
 		"All of the above" # 5
 		"Return (do not configure anything)" # 6
     )
+
+	set +e
+
 	select opt in "${srv_options[@]}"
 	do
 		case $opt in 
@@ -338,6 +341,7 @@ function setup_services(){
 		esac
 	done
 
+	set -e
 }
 
 

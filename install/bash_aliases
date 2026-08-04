@@ -15,8 +15,8 @@ commands() (
 	duchk="${dupcc//%}"
 
 	source utils/configparser.sh
-	ipServer=$(parse_config "credentials" config_static.ini)
-	remoteDir=$(parse_config "remote_dir" config_static.ini)
+	load_data_server_config primary primary_ipServer primary_sshPort primary_remoteDir primary_configured
+	load_data_server_config secondary secondary_ipServer secondary_sshPort secondary_remoteDir secondary_configured
 
 	echo
 	if [[ "$duchk" -ge 80 ]]
@@ -38,7 +38,7 @@ commands() (
 	echo "${HL} status  	${RESET_HL}sudo systemctl status hypernets-sequence"
 	echo "${HL} kill-service	${RESET_HL}kill hypernets-sequence service without going to sleep"
 	echo "${HL} journal  	${RESET_HL}journalctl -b -u hypernets-sequence -e (journal -f to follow)"
-	echo "${HL} portal  	${RESET_HL}makes a portal via ~/Portal folder to $ipServer:${remoteDir%/}/"
+	echo "${HL} portal		${RESET_HL}makes a portal via ~/Portal folder    portal -h for help"
 	echo "${HL} gui		${RESET_HL}python -m hypernets.gui (if screen attached)"
 	echo "${HL} webpic 	${RESET_HL}take webcam photo    webpic -h for help"
 	echo "${HL} hypypic  	${RESET_HL}take photo from hypstar camera"
@@ -164,7 +164,7 @@ relay() (
 	fi
 
 	relay_states="$(python -m hypernets.yocto.relay -g -n1 -n2 -n3 -n4 -n5 -n6 2>&1)"
-	
+
 	if grep -q -i "error" <<< $relay_states; then
 		echo "${XHL}$relay_states${RESET_HL}"
 		exit
@@ -247,7 +247,7 @@ goto-sleep() (
 		read -p "${XHL}Confirm going to sleem? [y/n]: ${RESET_HL}" -rn1
 		echo
 		echo
-		
+
 		if [[ ! $REPLY =~ ^[Yy]$ ]]; then 
 			echo "${XHL}Aborting sleep${RESET_HL}"
 			exit -1
@@ -323,7 +323,7 @@ yapo() (
 		echo
 		exit 
 	fi
-	
+
 	max_wakeup_time=$(YWakeUpMonitor -f '[result]' -r 127.0.0.1 $yocto get_powerDuration)
 	sleep_countdown=$(YWakeUpMonitor -f '[result]' -r 127.0.0.1 $yocto get_sleepCountdown)
 
@@ -340,7 +340,7 @@ yapo() (
 
 	next_wakeup_timestamp=$(YWakeUpMonitor -f '[result]' -r 127.0.0.1 $yocto get_nextWakeUp|sed -e 's/[[:space:]].*//')
 	yocto_offset=$(YRealTimeClock -f '[result]' -r 127.0.0.1 $yocto get_utcOffset)
-		
+
 	if [[ "${yoption-}" == "" ]]; then ######## display yocto-auto-power-off status ###############
 		if [[ "$max_wakeup_time" -eq "0" ]]; then
 			echo "${HL}Yocto Auto-Power-Off is ${XHL}disabled! ${HL}PC will run for ${XHL}infinity...${RESET_HL}"
@@ -361,7 +361,7 @@ yapo() (
 			else
 				utc_offset=$(printf "%+d" $(("$yocto_offset" / 3600)))
 			fi
-			
+
 			if [ "$next_wakeup_timestamp" = 0 ]; then
 				echo "${XHL}Yocto scheduled wakeup is disabled${RESET_HL}"
 			else
@@ -419,7 +419,7 @@ EOF
 		YWakeUpMonitor -r 127.0.0.1 -s "$yocto" set_powerDuration $new_max_runtime >/dev/null 2>&1
 		set_max_wakeup_time=$(YWakeUpMonitor -f '[result]' -r 127.0.0.1 "$yocto" get_powerDuration)
 		echo "${HL}Auto-Power-Off set to power off after ${XHL}$set_max_wakeup_time seconds${RESET_HL}"
-		
+
 		if [ -f "$HYPERNETS_TOOLS"/sleep.lock ]; then
 			rm -f "$HYPERNETS_TOOLS"/sleep.lock
 			echo "${HL}Removed ${HYPERNETS_TOOLS}/sleep.lock${RESET_HL}"
@@ -522,7 +522,7 @@ pt() (
 		sunpos=1
 		deltapos=0
 		shift 1
-	
+
 		## if pan and tilt are empty then set to 0
 		if [ -z "${1-}" ]; then set -- "0" "0"; fi 
 
@@ -675,7 +675,7 @@ EOF
 		if [[ ! "$new_tilt" =~ ^([xX])$ ]]; then
 			requested_abs_tilt=$(bc <<< "($requested_abs_tilt + 36000) % 360")
 		fi
-	
+
 		## don't move the axis with "x" position to avoid any full rotations due to 0/360 position uncertainty
 		if [[ "$new_pan" =~ ^([xX])$ ]] && [[ "$new_tilt" =~ ^([xX])$ ]]; then
 			printf "No movement requested, staying in current position:\n"
@@ -706,11 +706,11 @@ EOF
 
 			new_abs_pan=$(cut -f 1 <<< $new_abs_pos)
 			new_abs_tilt=$(cut -f 2 <<< $new_abs_pos)
-		
+
 			## calculate relative position
 			new_hyper_pan=$(printf "%.1f" $(bc <<< "(($new_abs_pan) + ($offset_pan) + 36000) % 360"))
 			new_hyper_tilt=$(printf "%.1f" $(bc <<< "(($new_abs_tilt) + ($offset_tilt) + 36000) % 360"))
-	
+
 			## calculate residuals
 			if [[ "$new_pan"  =~ ^([xX])$ ]]; then
 				residual_pan="x"
@@ -723,7 +723,7 @@ EOF
 			else
 				residual_tilt=$(printf "%.1f" "$(bc <<< "$new_abs_tilt - $requested_abs_tilt")")
 			fi
-	
+
 			echo
 			echo "New positions"
 			printf "abs:   pan = %.1f, tilt = %.1f, residuals: pan = %s, tilt = %s\n" "$new_abs_pan" "$new_abs_tilt" "$residual_pan" "$residual_tilt"
@@ -740,9 +740,9 @@ schedule() (
 	cd "$HYPERNETS_TOOLS"
 
 	marray=()
-	
+
 	skipread=0
-	
+
 	if [[ "${1-}" == "-h" ]] || [[ "${1-}" == "--help" ]]
 	then
 		echo
@@ -753,7 +753,7 @@ schedule() (
 		echo "note: avoid overlaping sequences, max-runtime should be less than time between sequences"
 		exit
 	fi
-	
+
 	# check if Yocto command line API is installed
 	if [[ $(command -v YWakeUpMonitor) ]]; then
 		source utils/configparser.sh
@@ -768,7 +768,7 @@ schedule() (
 		echo "${XHL}Yocto API is not installed${RESET_HL}"
 		exit -1
 	fi
-	
+
 	yocto_offset=$(YRealTimeClock -f '[result]' -r 127.0.0.1 $yoctowifibrd get_utcOffset)
 	if [ "$yocto_offset" = 0 ]; then
 		utc_offset=""
@@ -848,7 +848,7 @@ schedule() (
 				tput cub 1
 				echo "]"
 			fi
-			
+
 			minutes_dec=$(YWakeUpSchedule -f '[result]' -r 127.0.0.1 "$yoctowifibrd".wakeUpSchedule"$n_sched" get_minutes)
 			minutes_bin=$(bc <<< "obase=2; $minutes_dec")
 			length=${#minutes_bin}
@@ -896,7 +896,7 @@ schedule() (
 				tz_offset_m=$(printf "%+d" $(( ("$yocto_offset" - 3600 * "$tz_offset_h" ) / 60)))
 				first_timestr=$(printf "%sT%02d:%02d%+03d:%02d" $(date '+%Y-%m-%d') "$first_h" "$first_m" "$tz_offset_h" "$tz_offset_m")
 				last_timestr=$(printf "%sT%02d:%02d%+03d:%02d" $(date '+%Y-%m-%d') "$last_h" "$last_m" "$tz_offset_h" "$tz_offset_m")
-	
+
 	        	python_script=$(cat << EOF
 import datetime
 from hypernets.geometry.spa_hypernets import spa_from_datetime
@@ -938,14 +938,14 @@ EOF
 
 		exit 0
 	fi
-	
+
 	## only schedule set past this line
 	if [[ "${1-}" != "set" ]]; then
 		exit
 	fi
-	
+
 	clear
-	
+
 	while [ 1 ]
 	do
 		if [[ "$skipread" -eq 0 ]] #skip to schedule adjust if pressed redo
@@ -954,7 +954,7 @@ EOF
 			echo
 			echo "${HL}                Yocto Schedule                 ${RESET_HL}"
 			echo  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ "
-			
+
 			yerrl=1
 			while [ "$yerrl" -eq 1 ] #check for yocto comms
 			do
@@ -971,7 +971,7 @@ EOF
 					yerrl=0
 				fi
 			done
-			
+
 			echo -n "    Rugged PC date & time:  "
 			date '+%Y/%m/%d %H:%M:%S %Z'
 			echo -n "    Yocto date & time is:   "
@@ -981,7 +981,7 @@ EOF
 			else
 				echo "$yocto_time UTC$utc_offset (UTC offset is $yocto_offset s)"
 			fi
-	
+
 			next_wakeup_timestamp=$(YWakeUpMonitor -f '[result]' -r 127.0.0.1 "$yoctowifibrd" get_nextWakeUp|sed -e 's/[[:space:]].*//')
 			if [ "$next_wakeup_timestamp" = 0 ]; then
 				echo "${XHL}    Yocto scheduled wakeup is disabled${RESET_HL}"
@@ -1006,7 +1006,7 @@ EOF
 					fi
 				done
 			fi
-			
+
 			## clear read buffer
 			set +e
 			read -s -t 0.1
@@ -1024,24 +1024,24 @@ EOF
 			echo "              Z - adjust Yocto time zone"
 			echo "              E - Exit"
 			echo "  any other key - Refresh ${RESET_HL}"
-			
+
 			#loop waiting for key press & displaying time until yocto shutdown
 			loopy=1
-			
+
 			set +e
 			while [ "$loopy" -eq 1 ] 
 			do
 				tput civis     # -- invisible #hide the cursor
-			
+
 				read -s -t 0.1 -n1 -r ch #don't echo input, timeout after 0.1s, accept 1st keypress, put into var ch
 				if [ $? = 0 ] #read length is 0 after 0s timeout exit
 				then	
 					tput cup 6 0
-			
+
 					loopy=0 #exit loop
 					break
 				fi
-			
+
 				#CHECK FOR YOCTO COMMS
 				yerr=$(YRealTimeClock -r 127.0.0.1 "$yoctowifibrd" get_dateTime 2>&1) #get yocto dt
 				yer=${yerr:0:20}
@@ -1056,9 +1056,9 @@ EOF
 		skipread=0
 		tput cup 18 1 
 		tput cnorm  
-		
-		
-		
+
+
+
 		#################### #Adjust schedule #######################################################
 		if [ "$ch" = "1" ] # Schedule 1 (standard)
 		then
@@ -1073,22 +1073,22 @@ EOF
 			schedy=3
 			ch=99
 		fi
-		
+
 		if [ "$ch" = "99" ] 
 		then
 			clear
 			echo
-		
+
 			echo "${HL}                Yocto Schedule                 ${RESET_HL}"
 			echo "Yocto time zone is UTC$utc_offset"
 			echo  "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ "
-			
-			
+
+
 			nwku=$(YWakeUpMonitor -r 127.0.0.1 any get_nextWakeUp) #get yocto nextwakeup
-			
+
 			value=${nwku#*=}  # print everything after the = 
 			valu=$(echo "$value" | grep -o -E '[0-9]+' | head -1 | sed -e 's/^0\+//') #remove the 1st number only
-			
+
 			echo "     ${HL}Schedule $schedy${RESET_HL}  "
 			echo "Visible parameters are active, \"_\" marks inactive"
 			echo "All inactive is equivalent to all set for a single field"
@@ -1143,7 +1143,7 @@ EOF
 			hours="$hrsasset"
 			hours=$(echo "$hours" | tr , " ")   #swap , delimiter for space
 			echo "Hours as set:        [$hours] "
-			
+
 			minbin=$(YWakeUpSchedule -r 127.0.0.1 "$yoctowifibrd".wakeUpSchedule"$schedy" get_minutes)
 			minbin=${minbin#*= }  # print everything after the =
 			minbin=${minbin%"."}  #remove the trailing dot.
@@ -1167,7 +1167,7 @@ EOF
 			#Convert binary to minutes values
 			minsasset="["
 			cma=0
-			
+
 			mni=-1
 			for (( mn=$dbn;mn>=0;mn-- )) ; do #count thru db 0->60, 1 bit/minute, count backwards as lsn is on the right
 				L=$(echo ${db:$mn:1}) #step thru db array checking 1 char(mn) at a time
@@ -1184,9 +1184,9 @@ EOF
 			done
 			minsasset="${minsasset}]"
 			echo "$minsasset"
-			
+
 			echo
-			
+
 			set +e
 			while true;
 			do
@@ -1200,7 +1200,7 @@ EOF
 			tput cuu 1
 			done
 			set -e
-			
+
 			############ ADJUST SCHED ###################
 			if [[ "$sc" =~ ^([aA])$ ]] 
 			then
@@ -1226,7 +1226,7 @@ EOF
 				looopy=1
 				xj=1  #the amount to jump cursor forwards/backward with arrows
 				nf=1
-				
+
 				mins="$minsasset"
 				mins=${mins#*[}  # print everything after the =
 				mins=${mins%"]"}  #remove the trailing dot.
@@ -1235,12 +1235,12 @@ EOF
 					L=""
 					tput cup $y 0 #put cursor
 					echo -n "$adjv[$field]"
-					
+
 					x=$((fieldlength - i))
 					x=$((x + 1))
 					tput cub "$x"  #put cursor wrt position in year
 					tput cnorm     # -- show the cursor
-				
+
 					#Get input & check for arrow keys (read options remove the arrow ^[[ parts)
 				    IFS="" read -r -sn1 userinput
 					tput civis     # -- invisible #hide the cursor
@@ -1287,7 +1287,7 @@ EOF
 						fi
 						field=$(echo ${field:0:i}$hmmm${field:i+1}) #update the adjusted field at position i
 					fi
-				
+
 					if [[ "$fieldn" -eq 3 ]] #correct for x jump while arrow backwards on hours
 					then
 						if [[ "$i" -gt 18 ]]
@@ -1301,13 +1301,13 @@ EOF
 							xj=2
 						fi
 					fi
-				
+
 					if [[ "$userinput" = "zzzzz" ]] && [[ "$i" -gt 0 ]] #echo backwards 1  check is not < jan
 					then
 						tput cub "$xj" #move backwards
 						i=$((i - xj))
 					fi
-				
+
 					if [[ "$userinput" = "zzzz" ]] && [[ "$i" -lt "$fieldlength"-"$xj" ]] #echo forwards 1 check is not > dec
 					then
 						tput cuf "$xj" #move forwards
@@ -1317,7 +1317,7 @@ EOF
 					if [[ "$userinput" = "" ]]
 					then	
 						y=$((y + nf)) #move cursor down 
-						
+
 						tput cup "$y" 0 #put cursor
 						fieldn=$((fieldn + 1))  #next field to plow
 						if [[ "$fieldn" -eq 2 ]]
@@ -1350,7 +1350,7 @@ EOF
 							hours="$field"
 							break
 						fi
-			
+
 						y=$((y + 1)) #move cursor down 
 						yt=$((y + 2))
 						tput cup "$yt" 0 #put cursor
@@ -1360,25 +1360,25 @@ EOF
 						fi
 						tput cuu 2 #put cursor back up 2 lines
 					fi
-			
+
 					#clear screen
 					tput cup "$y" 0 #put cursor to x origin
 					tput cuf "$xc" #put cursor to end of field
 					tput el #clear to end of line
-			
+
 					#exit & save
 					if [[ "$userinput" =~ ^([sS])$ ]] || [[ "$loopy" -eq 0 ]]
 					then
 						loopy=0
 					fi
-			
+
 					#redo
 					if [[ "$userinput" =~ ^([rR])$ ]] #redo
 					then
 						echo "  Give it another crack then....  "
 						loopy=0
 					fi
-			
+
 					#exit
 					if [[ "$userinput" =~ ^([mM])$ ]]    
 					then
@@ -1386,12 +1386,12 @@ EOF
 						echo " Bailed "
 					fi
 				done
-			
+
 				if [[ "$fieldn" -eq 4 ]]
 				then
 					echo -n "Minutes as set:      "
 					echo "$minsasset"
-			
+
 					fieldformat="a,b,c,d"
 					fieldlength=34
 					field=$mins
@@ -1407,7 +1407,7 @@ EOF
 					tput cub 141 #put cursor to start of line
 					tput cuf 21 #put cursor to end of field
 					tput cuu 1
-			
+
 					tput cnorm
 					read ma
 					fieldn=5
@@ -1424,12 +1424,12 @@ EOF
 					fi
 					minutes=${minutes/]/}
 					minutes=${minutes#[}
-	
+
 					# set to -1 if no minutes set (empty or only spaces)
 					if [[ -z "${minutes// }" ]]; then 
 						minutes="-1"
 					fi
-			
+
 					echo 
 					echo "   DONE                                                                                                                 "
 					echo
@@ -1471,7 +1471,7 @@ EOF
 					months=$(echo "obase=10; ibase=2; $months" | bc)
 					#save to yocto
 					YWakeUpSchedule -r 127.0.0.1 "$yoctowifibrd".wakeUpSchedule"$schedy" set_months $months
-			
+
 					day=$(echo "$day" | tr _ . )
 			 		read -a darray <<< $(echo "$day" | sed 's/./& /g') # put a space btween each char
 					dbinarray=() #clear array
@@ -1490,7 +1490,7 @@ EOF
 					day=$(echo "obase=10; ibase=2; $day" | bc)
 					#save to yocto
 					YWakeUpSchedule -r 127.0.0.1 "$yoctowifibrd".wakeUpSchedule"$schedy" set_weekDays "$day"
-			 
+
 					harray=($(echo $hours)) #put hours into array
 					for (( hn=23;hn>=0;hn-- )) ; do #loop until last num
 						hnn=${harray[$hn]}
@@ -1523,7 +1523,7 @@ EOF
 					hours=$(echo "obase=10; ibase=2; $hours" | bc)
 					#save to yocto
 					YWakeUpSchedule -r 127.0.0.1 "$yoctowifibrd".wakeUpSchedule"$schedy" set_hours "$hours"
-			
+
  					marray=($(echo "$minutes" | tr "," "\n")) #remove the , put into an array
  					len=${#marray[@]} # number of vars in arrays
 
@@ -1535,14 +1535,14 @@ EOF
 					done
 					#save to yocto
  					YWakeUpSchedule -s -r 127.0.0.1 "$yoctowifibrd".wakeUpSchedule"$schedy" set_minutes "$dec"
-			
+
 					echo
 					#all saved to yocto!
 					echo "${RESET_HL}          Schedule is set! "
 					sleep 1
 				fi # "$userinput" =~ ^([sS])$   Save
-			
-			
+
+
 				#redo
 				if [[ "$userinput" =~ ^([rR])$ ]] #redo
 				then
@@ -1550,7 +1550,7 @@ EOF
 					ch=99
 					skipread=1
 				fi
-			
+
 				#exit
 				if [[ "$userinput" =~ ^([aA])$ ]]    
 				then
@@ -1562,7 +1562,7 @@ EOF
 				tput cuu 3 #put cursor back up 3 lines
 				tput cuf 22 #put cursor 22 chars along the line
 			fi
-		
+
 			echo "${RESET_HL}"
 			sleep 1
 		fi # "$ch" = "99" schedule adjustment
@@ -1624,7 +1624,7 @@ EOF
 					echo "Setting Yocto time zone to UTC$new_utc_offset"
 					echo
 					YRealTimeClock -s -r 127.0.0.1 $yoctowifibrd set_utcOffset "$new_yocto_offset"
-					
+
 					echo
 					echo "${XHL} Warning!!"
 					echo " It may take up to one minute until the Yocto"
@@ -1643,7 +1643,7 @@ EOF
 				sleep 1
 			fi
 		fi # [[ "$ch" =~ ^([zZ])$ ]] # yocto time zone
-	
+
 
 		######### EXIT #########
 		if [[ "$ch" =~ ^([eE])$ ]] 
@@ -1654,8 +1654,8 @@ EOF
 			echo  "The end "
 			exit
 		fi
-		
-		
+
+
 		#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 		sleep 1
@@ -1680,7 +1680,7 @@ webpic() (
 		echo
 		exit -1
 	}
-		
+
 	if [[ "${1-}" == "-h" ]] || [[ "${1-}" == "--help" ]]; then
 		webpic_help
 	fi
@@ -1698,7 +1698,7 @@ webpic() (
 	source utils/configparser.sh
 	poe_cameras=$(parse_config "poe_cameras" config_static.ini)
 	config=$(parse_config "webcam_$cam" config_static.ini)
-	
+
 	webcam_credent=$(echo "$config" | cut -d "@" -f1)
 	webcam_ip=$(echo "$config" | cut -d "@" -f2)
 
@@ -1707,7 +1707,7 @@ webpic() (
 		echo "${XHL}$cam camera IP '$webcam_ip' is invalid in config_static.ini${RESET_HL}"
 		exit -1
 	fi
-	
+
 	set +e
 	set pipefail
 	export AV_LOG_FORCE_COLOR=1
@@ -1730,19 +1730,36 @@ webpic() (
 		imgname=$(grep "Output File is" <<< "$cap_out" | sed -e "s/[^']*'//;s/'.*//")
 		echo "${HL}$cam camera image has been stored as $imgname${RESET_HL}"
 
+
 		source utils/configparser.sh
-		ipServer=$(parse_config "credentials" config_static.ini)
-		remoteDir=$(parse_config "remote_dir" config_static.ini)
-		sshPort=$(parse_config "ssh_port" config_static.ini)
+		load_data_server_config primary primary_ipServer primary_sshPort primary_remoteDir primary_configured
+		load_data_server_config secondary secondary_ipServer secondary_sshPort secondary_remoteDir secondary_configured
 
 		set +e
-		cap_file=$(sed -e "s%$HYPERNETS_TOOLS%%;s%^/%%" <<< $imgname)
-		rsync -e "ssh -p $sshPort" -t --relative "$cap_file" "$ipServer:$remoteDir"
+		cap_file=$(sed -e "s%$HYPERNETS_TOOLS%%;s%^/%%" <<< "$imgname")
 
-		if [[ $? -ne 0 ]]; then
-			echo "${XHL}Copying the image to $ipServer failed${RESET_HL}"
-		else
-			echo "${HL}Copied the image to $ipServer:${remoteDir%/}/$cap_file${RESET_HL}"
+		if $primary_configured; then
+		    rsync -e "ssh -p $primary_sshPort" -t --relative "$cap_file" "$primary_ipServer:$primary_remoteDir"
+
+		    if [[ $? -ne 0 ]]; then
+		        echo "${XHL}Copying the image to the primary server ($primary_ipServer) failed${RESET_HL}"
+		    else
+		        echo "${HL}Copied the image to $primary_ipServer:${primary_remoteDir%/}/$cap_file${RESET_HL}"
+		    fi
+		fi
+
+		if $secondary_configured; then
+		    rsync -e "ssh -p $secondary_sshPort" -t --relative "$cap_file" "$secondary_ipServer:$secondary_remoteDir"
+
+		    if [[ $? -ne 0 ]]; then
+		        echo "${XHL}Copying the image to the secondary server ($secondary_ipServer) failed${RESET_HL}"
+		    else
+		        echo "${HL}Copied the image to $secondary_ipServer:${secondary_remoteDir%/}/$cap_file${RESET_HL}"
+		    fi
+		fi
+
+		if ! $primary_configured && ! $secondary_configured; then
+		    echo "${XHL}No server is configured${RESET_HL}"
 		fi
 	fi
 ) # webpic()
@@ -1761,7 +1778,7 @@ hypypic()(
 	cap_retcode=$?
 
 	saved_to=$(grep "INFO:root:Saved to" <<< "$cap_out" | sed -e 's/INFO:root:Saved to //;s/\.$//')
-	
+
 	if [[ "$cap_retcode" -ne 0 ]]; then
 		echo "${XHL}hypstar camera capture failed."
 		echo "Is relay 3 switched on?${RESET_HL}"
@@ -1772,46 +1789,191 @@ hypypic()(
 		echo "${HL}hypstar camera image has been stored as $HYPERNETS_TOOLS/$saved_to${RESET_HL}"
 
 		source utils/configparser.sh
-		ipServer=$(parse_config "credentials" config_static.ini)
-		remoteDir=$(parse_config "remote_dir" config_static.ini)
-		sshPort=$(parse_config "ssh_port" config_static.ini)
+		load_data_server_config primary primary_ipServer primary_sshPort primary_remoteDir primary_configured
+		load_data_server_config secondary secondary_ipServer secondary_sshPort secondary_remoteDir secondary_configured
 
 		set +e
-		rsync -e "ssh -p $sshPort" -t --relative "$saved_to" "$ipServer:$remoteDir"
+		cap_file=$(sed -e "s%$HYPERNETS_TOOLS%%;s%^/%%" <<< "$imgname")
 
-		if [[ $? -ne 0 ]]; then
-			echo "${XHL}Copying the image to $ipServer failed${RESET_HL}"
-		else
-			echo "${HL}Copied the image to $ipServer:${remoteDir%/}/$saved_to${RESET_HL}"
+		if $primary_configured; then
+		    rsync -e "ssh -p $primary_sshPort" -t --relative "$saved_to" "$primary_ipServer:$primary_remoteDir"
+
+		    if [[ $? -ne 0 ]]; then
+		        echo "${XHL}Copying the image to the primary server ($primary_ipServer) failed${RESET_HL}"
+		    else
+		        echo "${HL}Copied the image to $primary_ipServer:${primary_remoteDir%/}/$saved_to${RESET_HL}"
+		    fi
+		fi
+
+		if $secondary_configured; then
+		    rsync -e "ssh -p $secondary_sshPort" -t --relative "$saved_to" "$secondary_ipServer:$secondary_remoteDir"
+
+		    if [[ $? -ne 0 ]]; then
+		        echo "${XHL}Copying the image to the secondary server ($secondary_ipServer) failed${RESET_HL}"
+		    else
+		        echo "${HL}Copied the image to $secondary_ipServer:${secondary_remoteDir%/}/$saved_to${RESET_HL}"
+		    fi
+		fi
+
+		if ! $primary_configured && ! $secondary_configured; then
+		    echo "${XHL}No server is configured${RESET_HL}"
 		fi
 	fi
 ) # hypypic()
 
 
 portal()(
-	cd "$HYPERNETS_TOOLS"
+    cd "$HYPERNETS_TOOLS"
 
-	mkdir -p ~/Portal
+    local mode="${1:-auto}"
 
-	source utils/configparser.sh
-	ipServer=$(parse_config "credentials" config_static.ini)
-	remoteDir=$(parse_config "remote_dir" config_static.ini)
-	sshPort=$(parse_config "ssh_port" config_static.ini)
-	
-	if mountpoint -q ~/Portal; then
-		echo "${HL}Portal is already open${RESET_HL}"
-		exit
-	fi
+   	source utils/configparser.sh
+	load_data_server_config primary primary_ipServer primary_sshPort primary_remoteDir primary_configured
+	load_data_server_config secondary secondary_ipServer secondary_sshPort secondary_remoteDir secondary_configured
 
-	set +e
-	echo "${HL}$(readlink -m ~/Portal)/ ---> linking to: ---> $ipServer:${remoteDir%/}/${RESET_HL}"
-	sshfs -p $sshPort -o reconnect,ServerAliveInterval=60,ServerAliveCountMax=3 "$ipServer:${remoteDir%/}/" ~/Portal
+	two_servers_configured=false
+	$primary_configured && $secondary_configured && two_servers_configured=true
 
-	if [[ $? -eq 0 ]]; then
-		echo "${HL}Portal is open${RESET_HL}"
-	else
-		echo "${XHL}Failed to open Portal${RESET_HL}"
-	fi
+	print_help() {
+	    echo
+	    echo "portal [-h|--help] [primary|secondary|close]"
+	    echo
+	    echo "Open or close sshfs portal(s) to configured remote server(s)."
+	    echo
+	    echo "portal            open portal(s) using configured server(s)"
+	    echo "                  one server configured  -> ~/Portal"
+	    echo "                  two servers configured -> primary in ~/Portal"
+	    echo "                                            secondary in ~/Portal2"
+	    echo
+	    echo "portal primary    when two servers are configured, open only the"
+	    echo "                  primary server in ~/Portal"
+	    echo
+	    echo "portal secondary  when two servers are configured, open only the"
+	    echo "                  secondary server in ~/Portal2"
+	    echo
+	    echo "                  if only one server is configured, the"
+	    echo "                  primary/secondary option is ignored and the"
+	    echo "                  configured server is opened in ~/Portal"
+	    echo
+	    echo "portal close      close all open portals (~/Portal and ~/Portal2)"
+	    echo
+	}
+
+	case "${1-}" in
+	    ""|primary|secondary|close)
+	        ;;
+	    -h|--help)
+	        print_help
+	        exit 0
+	        ;;
+	    *)
+	        echo "${XHL}Invalid option: $1${RESET_HL}"
+	        print_help
+	        exit 1
+	        ;;
+	esac
+
+	open_portal() {
+        local portal_dir="$1"
+        local ipServer="$2"
+        local sshPort="$3"
+        local remoteDir="$4"
+
+        mkdir -p "$portal_dir"
+
+        if mountpoint -q "$portal_dir"; then
+            echo "${HL}$portal_dir is already open${RESET_HL}"
+            return
+        fi
+
+        echo "${HL}$(readlink -m "$portal_dir")/ ---> linking to: ---> $ipServer:${remoteDir%/}/${RESET_HL}"
+
+        sshfs -p "$sshPort" \
+            -o reconnect,ServerAliveInterval=60,ServerAliveCountMax=3 \
+            "$ipServer:${remoteDir%/}/" \
+            "$portal_dir"
+
+        if [[ $? -eq 0 ]]; then
+            echo "${HL}$portal_dir is open${RESET_HL}"
+        else
+            echo "${XHL}Failed to open $portal_dir${RESET_HL}"
+        fi
+    }
+
+	case "$mode" in
+	    close)
+			fusermount -u ~/Portal  2>/dev/null
+			fusermount -u ~/Portal2 2>/dev/null
+	        echo "${HL}All portals closed${RESET_HL}"
+	        ;;
+
+	    primary)
+	        if $two_servers_configured; then
+	            open_portal ~/Portal \
+	                "$primary_ipServer" \
+	                "$primary_sshPort" \
+	                "$primary_remoteDir"
+	        elif $primary_configured; then
+	            open_portal ~/Portal \
+	                "$primary_ipServer" \
+	                "$primary_sshPort" \
+	                "$primary_remoteDir"
+	        elif $secondary_configured; then
+	            open_portal ~/Portal \
+	                "$secondary_ipServer" \
+	                "$secondary_sshPort" \
+	                "$secondary_remoteDir"
+	        fi
+	        ;;
+
+	    secondary)
+	        if $two_servers_configured; then
+	            open_portal ~/Portal2 \
+	                "$secondary_ipServer" \
+	                "$secondary_sshPort" \
+	                "$secondary_remoteDir"
+	        elif $primary_configured; then
+	            open_portal ~/Portal \
+	                "$primary_ipServer" \
+	                "$primary_sshPort" \
+	                "$primary_remoteDir"
+	        elif $secondary_configured; then
+	            open_portal ~/Portal \
+	                "$secondary_ipServer" \
+	                "$secondary_sshPort" \
+	                "$secondary_remoteDir"
+	        fi
+	        ;;
+
+	    auto|*)
+	        if $two_servers_configured; then
+	            open_portal ~/Portal \
+	                "$primary_ipServer" \
+	                "$primary_sshPort" \
+	                "$primary_remoteDir"
+
+	            open_portal ~/Portal2 \
+	                "$secondary_ipServer" \
+	                "$secondary_sshPort" \
+	                "$secondary_remoteDir"
+
+	        elif $primary_configured; then
+	            open_portal ~/Portal \
+	                "$primary_ipServer" \
+	                "$primary_sshPort" \
+	                "$primary_remoteDir"
+
+	        elif $secondary_configured; then
+	            open_portal ~/Portal \
+	                "$secondary_ipServer" \
+	                "$secondary_sshPort" \
+	                "$secondary_remoteDir"
+
+	        else
+	            echo "${XHL}No server is configured${RESET_HL}"
+	        fi
+	        ;;
+	esac
 ) # portal()
 
 

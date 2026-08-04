@@ -1,3 +1,8 @@
+Version 3.4.0: (2026-07-30)
+	- add support for primary and secondary network server. Data upload and
+	  reverse ssh tunnel can be enabled or disabled for each server.
+	- add broadband modem diagnostics util
+
 Version 3.3.2: (2026-05-08)
 	- add option to return without configuring any services to item 11 of 
 	  the install wizard

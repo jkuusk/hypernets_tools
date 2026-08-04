@@ -3,7 +3,7 @@ DATA/
 LOGS/
 OTHER/
 ARCHIVE/
-config_hypernets.ini
+SECONDARY_QUEUE/
 config_dynamic.ini
 config_static.ini
 .ipynb_checkpoints/

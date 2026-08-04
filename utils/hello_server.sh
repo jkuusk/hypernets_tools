@@ -165,10 +165,11 @@ make_log() {
 	set -e
 }
 
+
 remove_old_backups_from_archive() {
-	folder="$1"
-	lvl=$2
-	keep=$3
+	local folder="$1"
+	local lvl=$2
+	local keep=$3
 
 	if [ ! -d ARCHIVE/$folder ]; then 
 		return
@@ -191,6 +192,149 @@ remove_old_backups_from_archive() {
 	fi
 }
 
+
+touch_server_is_up() {
+    local server="$1"    # "primary" or "secondary"
+    local ipServer="$2"
+    local sshPort="$3"
+    local remoteDir="$4"
+
+    for i in {1..30}; do
+        echo "[INFO]  ($server server, attempt #$i) Touching $ipServer:$remoteDir/system_is_up"
+
+        # If Yocto API is installed, write next scheduled wakeup time
+        if [[ $(command -v YWakeUpMonitor) && $(command -v YRealTimeClock) ]]; then
+            yocto=$(parse_config "yocto_prefix2" config_static.ini)
+            if [[ -z "$yocto" ]]; then
+                yocto=$(parse_config "yocto_prefix3" config_static.ini)
+            fi
+
+            next_wakeup_timestamp=$(YWakeUpMonitor -f '[result]' -r 127.0.0.1 "$yocto" get_nextWakeUp | sed -e 's/[[:space:]].*//')
+            yocto_offset=$(YRealTimeClock -f '[result]' -r 127.0.0.1 "$yocto" get_utcOffset)
+            retcode=$?
+
+            if [[ $retcode -ne 0 ]]; then
+                msg_txt="Yocto '$yocto' is not accessible!"
+                echo "[ERROR]  $msg_txt"
+            elif [[ "$next_wakeup_timestamp" = 0 ]]; then
+                msg_txt="Yocto scheduled wakeup is disabled!"
+            else
+                if [[ "$yocto_offset" = 0 ]]; then
+                    utc_offset=""
+                else
+                    utc_offset=$(printf "%+d" $((yocto_offset / 3600)))
+                fi
+
+                msg_txt="Next Yocto wakeup is scheduled on $(date -d "@$next_wakeup_timestamp" '+%Y/%m/%d %H:%M:%S') UTC$utc_offset"
+            fi
+        else
+            msg_txt="Yocto API is not installed, can't read next scheduled wakeup"
+        fi
+
+		ssh -p "$sshPort" -t $ipServer "echo \"$msg_txt\" > $remoteDir/system_is_up" > /dev/null 2>&1
+
+        if [[ $? -eq 0 ]]; then
+            echo "[INFO]  $server server is up!"
+            return 0
+        fi
+
+        echo "[INFO]  Unsuccessful, sleeping 10s..."
+        sleep 10
+    done
+
+    echo "[WARNING]  Failed to update system_is_up on the $server server."
+    return 1
+}
+
+
+sync_data() {
+	local server="$1"
+	local sshPort="$2"
+	local ipServer="$3"
+	local remoteDir="$4"
+	local rootFolder="${5%/}"
+
+	echo "[INFO]  Syncing Data to $server server..."
+
+	## first sync the SEQ folders without metadata.txt
+	rsync -e "ssh -p $sshPort" -ram $rsync_loglevel $rsync_chmod --remove-source-files \
+			--exclude "metadata.txt" --exclude "CUR*" \
+			"$rootFolder/DATA" "$ipServer:$remoteDir"
+
+	# then sync metadata.txt to indicate that the sequence 
+	# has been completely transferred to the server
+	if [ $? -eq 0 ]; then
+		rsync -e "ssh -p $sshPort" -am $rsync_loglevel $rsync_chmod --remove-source-files --exclude "CUR*" --include "*/" \
+			--include "metadata.txt" --exclude "*" "$rootFolder/DATA" "$ipServer:$remoteDir"
+
+		if [ $? -eq 0 ]; then
+			echo "[INFO]  All data and metadata files have been successfully uploaded to $server server."
+		else
+			echo "[WARNING]  Error while uploading metadata to $server server!"
+		fi
+
+	else
+		echo "[WARNING]  Error while uploading data to $server server!"
+	fi
+
+	# finally sync only meteo.csv from CUR folders and delete the folders after successful transfer
+	# exclude CUR folders from current day to avoid interfering with ongoing sequence
+	echo "[INFO]  Syncing uncompled (CUR) sequence meteo.csv to $server server..."
+	rsync -e "ssh -p $sshPort" -am $rsync_loglevel $rsync_chmod --remove-source-files \
+			--exclude "SEQ*" --exclude "$(date +'CUR%Y%m%dT*')" --include "*/" \
+			--include "meteo.csv" --exclude "*" "$rootFolder/DATA" "$ipServer:$remoteDir" && \
+		find DATA -mindepth 1 -depth -type d -regextype posix-extended -regex ".*/CUR[0-9]{8}T[0-9]{6}" \
+			\! -exec test -f '{}/meteo.csv' \; -exec rm -rf {} +
+
+	# clean up empty folders, exclude CUR folders from current day
+	find "$rootFolder/DATA/" -mindepth 1 -depth -type d -not -path "$(date +'$rootFolder/DATA/%Y/%m/%d')" -not -path "$(date +'*CUR%Y%m%dT*')" -empty -delete
+}
+
+
+sync_logs() {
+	local server="$1"
+	local sshPort="$2"
+	local ipServer="$3"
+	local remoteDir="$4"
+	local rootFolder="${5%/}"
+
+	echo "[INFO]  Syncing Logs to $server server..."
+
+	## first sync only the auto-generated service logs and remove after sync
+	rsync -e "ssh -p $sshPort" -am $rsync_loglevel $rsync_chmod --remove-source-files \
+			-f'+ *[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-[0-9][0-9][0-9][0-9]-[a-z]*.log' \
+			-f'+ *[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-[0-9][0-9][0-9][0-9]-[0-9][0-9][0-9]-[a-z]*.log' \
+			-f'+ */' -f'- *' "$rootFolder/LOGS" "$ipServer:$remoteDir" && \
+		find "$rootFolder/LOGS/" -mindepth 1 -depth -type d -not -path "$rootFolder/LOGS/$YMFolder" -empty -delete
+
+	## next sync all the remaining files and folders in LOGS/ without removing after sync
+	rsync -e "ssh -p $sshPort" -am $rsync_loglevel $rsync_chmod "$rootFolder/LOGS" "$ipServer:$remoteDir"
+}
+
+
+sync_other() {
+	local server="$1"
+	local sshPort="$2"
+	local ipServer="$3"
+	local remoteDir="$4"
+	local rootFolder="${5%/}"
+
+	if [ -d "OTHER" ]; then
+		echo "[INFO]  Syncing Directory OTHER to $server server..."
+
+		## first sync only the auto-generated webcam images and remove after sync
+		rsync -e "ssh -p $sshPort" -am $rsync_loglevel $rsync_chmod --remove-source-files \
+				-f'+ *[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9].jpg' \
+				-f'+ */' -f'- *' "$rootFolder/OTHER" "$ipServer:$remoteDir" && \
+			find "$rootFolder/OTHER/" -mindepth 2 -depth -type d -not -path "$rootFolder/OTHER/WEBCAM_*/$YMFolder" -empty -delete
+
+		## next sync all the remaining files and folders in OTHER/ without removing after sync
+		rsync -e "ssh -p $sshPort" -am $rsync_loglevel $rsync_chmod "$rootFolder/OTHER" "$ipServer:$remoteDir"
+	fi
+}
+
+############ end of functions ###########
+
 make_log $logNameBase sequence
 make_log $logNameBase hello systemd-timesyncd
 make_log $logNameBase access ssh sshd
@@ -201,35 +345,33 @@ net_traffic
 # Read config file :
 source utils/configparser.sh
 
-ipServer=$(parse_config "credentials" config_static.ini)
-remoteDir=$(parse_config "remote_dir" config_static.ini)
-sshPort=$(parse_config "ssh_port" config_static.ini)
-autoUpdate=$(parse_config "auto_update" config_dynamic.ini)
+load_data_server_config primary primary_ipServer primary_sshPort primary_remoteDir primary_configured
+load_data_server_config secondary secondary_ipServer secondary_sshPort secondary_remoteDir secondary_configured
 
-if [ -z $sshPort ]; then
-	sshPort="22"
-fi
+two_servers_configured=false
+$primary_configured && $secondary_configured && two_servers_configured=true
+
+autoUpdate=$(parse_config "auto_update" config_dynamic.ini)
 
 if [ -z $autoUpdate ]; then
 	autoUpdate="no"
 fi
 
-
 # Archive DATA
-echo "[INFO]  Linking data to archive directory..."
+echo "[INFO]  Linking data to archive..."
 for folderPath in $(find DATA -type d -regextype posix-extended -regex ".*/(CUR|SEQ)[0-9]{8}T[0-9]{6}"); do
 	seqname=$(basename $folderPath)
 	year="${seqname:3:4}"
 	month="${seqname:7:2}"
 	day="${seqname:9:2}"
 	yearMonthDayArchive="ARCHIVE/DATA/$year/$month/$day/"
-	
+
 	mkdir -p "$yearMonthDayArchive"
 	cp -Raulf "$folderPath" "$yearMonthDayArchive"
 done
 
 # Archive LOGS
-echo "[INFO]  Linking logs to archive directory..."
+echo "[INFO]  Linking logs to archive..."
 for fileLog in $(find LOGS -type f -regextype posix-extended -regex ".*/[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{4}(-[0-9]{3})?-[a-z]+.log"); do
   	year="${fileLog:5:4}"
   	month="${fileLog:10:2}"
@@ -240,82 +382,76 @@ for fileLog in $(find LOGS -type f -regextype posix-extended -regex ".*/[0-9]{4}
 done
 
 # Archive Webcam images
-echo "[INFO]  Linking webcam images to archive directory..."
+echo "[INFO]  Linking webcam images to archive..."
 for imgfile in $(find OTHER/ -type f -regextype posix-extended -regex "OTHER/WEBCAM_(SITE|SKY)/.*[0-9]{8}T[0-9]{6}.jpg"); do
 	filename="$(basename $imgfile)"
 	year="${filename:0:4}"
 	month="${filename:4:2}"
 	camfolder="$(awk -F/ '{print $2}' <<< $imgfile)"
 	yearMonthArchive="ARCHIVE/OTHER/$camfolder/$year/$month/"
-	
+
 	mkdir -p "$yearMonthArchive"
 	cp -aulf "$imgfile" "$yearMonthArchive"
 done
 
-
-# Wait until we have connection with the server
 set +e
+
+# Link to secondary queue
+if $two_servers_configured; then
+	mkdir -p SECONDARY_QUEUE
+
+	echo "[INFO]  Linking DATA to secondary queue..."
+	cp -Raulf DATA/ SECONDARY_QUEUE/
+
+	echo "[INFO]  Linking LOGS to secondary queue..."
+	cp -Raulf LOGS/ SECONDARY_QUEUE/
+
+	echo "[INFO]  Linking OTHER to secondary queue..."
+	cp -Raulf OTHER/ SECONDARY_QUEUE/
+fi
+
+# Wait until we have connection with either the primary or secondary server
 echo "[INFO]  Waiting for network..."
-ipServer_ip=$(cut -d "@" -f2 <<< $ipServer)
+primary_ipServer_ip=$(cut -d "@" -f2 <<< $primary_ipServer)
+secondary_ipServer_ip=$(cut -d "@" -f2 <<< $secondary_ipServer)
 while true ; do
-	if nc -zw1 "$ipServer_ip" "$sshPort" >/dev/null 2>&1
+	if $primary_configured && nc -zw1 "$primary_ipServer_ip" "$primary_sshPort" >/dev/null 2>&1
 	then
-		echo "[INFO]  got response from the network server"
+		echo "[INFO]  got response from the primary network server"
+		break
+	fi
+
+	if $secondary_configured && nc -zw1 "$secondary_ipServer_ip" "$secondary_sshPort" >/dev/null 2>&1
+	then
+		echo "[INFO]  got response from the secondary network server"
 		break
 	fi
 
 	sleep 1
 done
 
-for i in {1..30}
-do
-	# Update the datetime flag on the server
-	echo "[INFO]  (attempt #$i) Touching $ipServer:$remoteDir/system_is_up"
 
-	# If yocto API is installed, write next scheduled wakeup time into 'system_is_up' file on server
-	if [[ $(command -v YWakeUpMonitor) && $(command -v YRealTimeClock) ]]; then
-		yocto=$(parse_config "yocto_prefix2" config_static.ini)
-		if [[ "$yocto" == "" ]]; then
-		# host system V4 or newer
-		    yocto=$(parse_config "yocto_prefix3" config_static.ini)
-		fi
+if $primary_configured; then
+    touch_server_is_up "primary" "$primary_ipServer" "$primary_sshPort" "$primary_remoteDir" 
+fi
 
-		next_wakeup_timestamp=$(YWakeUpMonitor -f '[result]' -r 127.0.0.1 $yocto get_nextWakeUp|sed -e 's/[[:space:]].*//')
-		yocto_offset=$(YRealTimeClock -f '[result]' -r 127.0.0.1 $yocto get_utcOffset)
-		retcode=$?
-
-		if [[ "$retcode" -ne 0 ]]; then
-			msg_txt="Yocto '$yocto' is not accessible!"
-			echo "[ERROR]  $msg_txt"
-		elif [ "$next_wakeup_timestamp" = 0 ]; then
-			msg_txt="Yocto scheduled wakeup is disabled!"
-		else
-			if [ "$yocto_offset" = 0 ]; then
-				utc_offset=""
-			else
-				utc_offset=$(printf "%+d" $(("$yocto_offset" / 3600)))
-			fi
-			msg_txt="Next Yocto wakeup is scheduled on $(date -d @$next_wakeup_timestamp '+%Y/%m/%d %H:%M:%S') UTC$utc_offset"
-		fi
-	else
-		msg_txt="Yocto API is not installed, can't read next scheduled wakeup"
-	fi
-
-	ssh -p $sshPort -t $ipServer "echo \"$msg_txt\" > $remoteDir/system_is_up" > /dev/null 2>&1
-	if [[ $? -eq 0 ]] ; then
-		echo "[INFO]  Server is up!"
-		break
-	fi
-	echo "[INFO]  Unsuccessful, sleeping 10s..."
-	sleep 10
-done
+if $secondary_configured; then
+    touch_server_is_up "secondary" "$secondary_ipServer" "$secondary_sshPort" "$secondary_remoteDir" 
+fi
 set -e
 
 # Sync Config File
 source utils/bidirectional_sync.sh
 
-bidirectional_sync "config_dynamic.ini" \
-	"$ipServer" "$remoteDir/config_dynamic.ini.$USER" "$sshPort"
+if $primary_configured; then
+	bidirectional_sync "config_dynamic.ini" \
+		"$primary_ipServer" "$primary_remoteDir/config_dynamic.ini.$USER" "$primary_sshPort"
+fi
+
+if $secondary_configured; then
+	bidirectional_sync "config_dynamic.ini" \
+		"$secondary_ipServer" "$secondary_remoteDir/config_dynamic.ini.$USER" "$secondary_sshPort"
+fi
 
 
 # Auto-update hypernets_tools
@@ -328,76 +464,25 @@ if [[ "$autoUpdate" == "yes" ]] ; then
 fi
 
 
-####### SYNCING DATA ##########
+if $two_servers_configured; then
+    sync_data "primary" "$primary_sshPort" "$primary_ipServer" "$primary_remoteDir" "."
+    sync_logs "primary" "$primary_sshPort" "$primary_ipServer" "$primary_remoteDir" "."
+    sync_other "primary" "$primary_sshPort" "$primary_ipServer" "$primary_remoteDir" "."
 
-echo "[INFO]  Syncing Data..."
-
-## first sync the SEQ folders without metadata.txt
-rsync -e "ssh -p $sshPort" -ram $rsync_loglevel $rsync_chmod --remove-source-files \
-		--exclude "metadata.txt" --exclude "CUR*" \
-		"DATA" "$ipServer:$remoteDir"
-
-# then sync metadata.txt to indicate that the sequence 
-# has been completely transferred to the server
-if [ $? -eq 0 ]; then
-	rsync -e "ssh -p $sshPort" -am $rsync_loglevel $rsync_chmod --remove-source-files --exclude "CUR*" --include "*/" \
-		--include "metadata.txt" --exclude "*" "DATA" "$ipServer:$remoteDir"
-
-	if [ $? -eq 0 ]; then
-		echo "[INFO]  All data and metadata files have been successfully uploaded."
-	else
-		echo "[WARNING]  Error during the uploading metadata process!"
-	fi
-
+    sync_data "secondary" "$secondary_sshPort" "$secondary_ipServer" "$secondary_remoteDir" "SECONDARY_QUEUE"
+    sync_logs "secondary" "$secondary_sshPort" "$secondary_ipServer" "$secondary_remoteDir" "SECONDARY_QUEUE"
+    sync_other "secondary" "$secondary_sshPort" "$secondary_ipServer" "$secondary_remoteDir" "SECONDARY_QUEUE"
+elif $primary_configured; then
+    sync_data "primary" "$primary_sshPort" "$primary_ipServer" "$primary_remoteDir" "."
+    sync_logs "primary" "$primary_sshPort" "$primary_ipServer" "$primary_remoteDir" "."
+    sync_other "primary" "$primary_sshPort" "$primary_ipServer" "$primary_remoteDir" "."
+elif $secondary_configured; then
+    sync_data "secondary" "$secondary_sshPort" "$secondary_ipServer" "$secondary_remoteDir" "."
+    sync_logs "secondary" "$secondary_sshPort" "$secondary_ipServer" "$secondary_remoteDir" "."
+    sync_other "secondary" "$secondary_sshPort" "$secondary_ipServer" "$secondary_remoteDir" "."
 else
-	echo "[WARNING]  Error during the uploading data process!"
+    echo "[WARNING]  No upload server is configured."
 fi
-
-# finally sync only meteo.csv from CUR folders and delete the folders after successful transfer
-# exclude CUR folders from current day to avoid interfering with ongoing sequence
-echo "[INFO]  Syncing uncompled (CUR) sequence meteo.csv..."
-rsync -e "ssh -p $sshPort" -am $rsync_loglevel $rsync_chmod --remove-source-files \
-		--exclude "SEQ*" --exclude "$(date +'CUR%Y%m%dT*')" --include "*/" \
-		--include "meteo.csv" --exclude "*" "DATA" "$ipServer:$remoteDir" && \
-	find DATA -mindepth 1 -depth -type d -regextype posix-extended -regex ".*/CUR[0-9]{8}T[0-9]{6}" \
-		\! -exec test -f '{}/meteo.csv' \; -exec rm -rf {} +
-
-# clean up empty folders, exclude CUR folders from current day
-find DATA/ -mindepth 1 -depth -type d -not -path "$(date +'DATA/%Y/%m/%d')" -not -path "$(date +'*CUR%Y%m%dT*')" -empty -delete
-
-
-
-####### SYNCING LOGS ##########
-
-echo "[INFO]  Syncing Logs..."
-
-## first sync only the auto-generated service logs and remove after sync
-rsync -e "ssh -p $sshPort" -am $rsync_loglevel $rsync_chmod --remove-source-files \
-		-f'+ *[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-[0-9][0-9][0-9][0-9]-[a-z]*.log' \
-		-f'+ *[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-[0-9][0-9][0-9][0-9]-[0-9][0-9][0-9]-[a-z]*.log' \
-		-f'+ */' -f'- *' "LOGS" "$ipServer:$remoteDir" && \
-	find LOGS/ -mindepth 1 -depth -type d -not -path "LOGS/$YMFolder" -empty -delete
-
-## next sync all the remaining files and folders in LOGS/ without removing after sync
-rsync -e "ssh -p $sshPort" -am $rsync_loglevel $rsync_chmod "LOGS" "$ipServer:$remoteDir"
-
-
-
-####### SYNCING OTHER ##########
-
-if [ -d "OTHER" ]; then
-	echo "[INFO]  Syncing Directory OTHER..."
-	
-	## first sync only the auto-generated webcam images and remove after sync
-	rsync -e "ssh -p $sshPort" -am $rsync_loglevel $rsync_chmod --remove-source-files \
-			-f'+ *[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9].jpg' \
-			-f'+ */' -f'- *' "OTHER" "$ipServer:$remoteDir" && \
-		find OTHER/ -mindepth 2 -depth -type d -not -path "OTHER/WEBCAM_*/$YMFolder" -empty -delete
-
-	## next sync all the remaining files and folders in OTHER/ without removing after sync
-	rsync -e "ssh -p $sshPort" -am $rsync_loglevel $rsync_chmod "OTHER" "$ipServer:$remoteDir"
-fi
-
 
 ## Clean up ARCHIVE
 #
