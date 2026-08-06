@@ -96,7 +96,7 @@ reg_decode() {
 decode_network_scan() {
 
     echo
-    echo "✓ Cellular networks detected"
+    echo "Cellular networks detected"
     echo
 
     LTE_COUNT=0
@@ -266,17 +266,17 @@ send_at() {
 
             if grep -q "READY" <<< "$RESPONSE"; then
                 SIM_STATUS="READY"
-                echo "✓ SIM present and unlocked"
+                echo "SIM present and unlocked"
 
             elif grep -q "SIM PIN" <<< "$RESPONSE"; then
                 SIM_STATUS="PIN REQUIRED"
                 ISSUES+=("SIM PIN required")
-                echo "✗ SIM PIN required"
+                echo "SIM PIN required"
 
             elif grep -q "SIM PUK" <<< "$RESPONSE"; then
                 SIM_STATUS="PUK REQUIRED"
                 ISSUES+=("SIM PUK required")
-                echo "✗ SIM PUK required"
+                echo "SIM PUK required"
             fi
             ;;
 
@@ -320,7 +320,7 @@ send_at() {
 
             if grep -q "+CGCONTRDP:" <<< "$RESPONSE"; then
 
-                APN=$(sed -n 's/.*+CGCONTRDP: *[0-9]\+,[0-9]\+,"\([^"]*\)".*/\1/p' <<< "$RESPONSE")
+                APN=$(awk -F, '/^\+CGCONTRDP:/ {print $3}' <<< "$RESPONSE")
 
                 echo "Active APN: $APN"
 
@@ -411,6 +411,8 @@ send_at() {
                     echo "RSRP/RSRQ unavailable"
 
                 else
+					RSRP=${RSRP//$'\r'/}
+					RSRQ=${RSRQ//$'\r'/}
 
                     #
                     # LTE conversions per 3GPP
@@ -532,7 +534,7 @@ if [ "$SIM_STATUS" = "READY" ]; then
     echo "NETWORK SCAN  (may take several minutes)"
     echo "================================================================"
 
-    send_at "AT+COPS=?" 120
+    send_at "AT+COPS=?" 240
 fi
 
 ###############################################################################

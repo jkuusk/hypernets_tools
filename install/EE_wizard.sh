@@ -75,8 +75,8 @@ function update_repo(){
 	if sudo -u $SUDO_USER git diff --name-only "$before_sha" "$after_sha" -- install/EE_wizard.sh | grep -q .; then
 		echo
 		echo
-		echo "*******  install/EE_wizard.sh was updated by the pull.  *******"
-		echo "*******  Please restart the install wizard.             *******"
+		echo "${HL}*******  install/EE_wizard.sh was updated by the pull.  *******"
+		echo "*******  Please restart the install wizard.             *******${RESET_HL}"
 		echo
 		exit 0
 	fi

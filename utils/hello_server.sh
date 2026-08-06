@@ -78,8 +78,8 @@ disk_usage() {
     df -h -text4
 	journalctl --disk-usage
 
-    diskUsageOuput="LOGS/disk-usage.log"
-    dfOutput=$(df -text4 --output=used,avail,pcent)
+    local diskUsageOuput="LOGS/disk-usage.log"
+    local dfOutput=$(df -text4 --output=used,avail,pcent)
 
     if [ ! -f  $diskUsageOuput ] ; then
         echo "[INFO]  Creation of $diskUsageOuput"
@@ -93,7 +93,7 @@ disk_usage() {
 
 net_traffic() {
 	## Parse vnstat jsonversion 2
-	net_db=$(vnstat --json)
+	local net_db=$(vnstat --json)
 
 	if [[ $(jq '.jsonversion' <<< $net_db | sed -e 's/"//g') != "2" ]]; then 
 		echo "[ERROR]  Cannot parse vnstat JSON version $(jq '.jsonversion' <<< $net_db). Only version 2 is supported"
@@ -106,19 +106,20 @@ net_traffic() {
 
 	readarray -t month_tx < <(jq '.interfaces[].traffic.month | last .tx' <<< $net_db)
 	readarray -t month_rx < <(jq '.interfaces[].traffic.month | last .rx' <<< $net_db)
-	ym=$(paste -d "-" <(jq '.interfaces | first .traffic.month | last .date.year' <<< $net_db) \
+	local ym=$(paste -d "-" <(jq '.interfaces | first .traffic.month | last .date.year' <<< $net_db) \
 			<(jq '.interfaces | first .traffic.month | last .date.month' <<< $net_db))
 
 	readarray -t day_tx < <(jq '.interfaces[].traffic.day | last .tx' <<< $net_db)
 	readarray -t day_rx < <(jq '.interfaces[].traffic.day | last .rx' <<< $net_db)
-	ymd=$(paste -d "-" <(jq '.interfaces | first .traffic.day | last .date.year' <<< $net_db) \
+	local ymd=$(paste -d "-" <(jq '.interfaces | first .traffic.day | last .date.year' <<< $net_db) \
 			<(jq '.interfaces | first .traffic.day | last .date.month' <<< $net_db) \
 			<(jq '.interfaces | first .traffic.day | last .date.day' <<< $net_db))
 
-	monthly="$ym:"
-	daily="$ymd:"
+	local monthly="$ym:"
+	local daily="$ymd:"
 
 	## Loop over interfaces
+	local tx_mib rx_mib 
 	for i in "${!interfaces[@]}"; do 
 		tx_mib=$(printf "%.1f" $(bc <<< "(${month_tx[$i]}) / (1024 * 1024)"))
 		rx_mib=$(printf "%.1f" $(bc <<< "(${month_rx[$i]}) / (1024 * 1024)"))
@@ -143,12 +144,12 @@ net_traffic() {
 
 
 make_log() {
-	logNameBase=$1
-	logName=$2
+	local logNameBase=$1
+	local logName=$2
 	shift 2 
 
 	# get all remaining services to log
-	extra_services=""
+	local extra_services=""
 	while [[ ! -z "${1-}" ]]; do
 		extra_services="$extra_services -u $1 "
 		shift 1
@@ -170,6 +171,7 @@ remove_old_backups_from_archive() {
 	local folder="$1"
 	local lvl=$2
 	local keep=$3
+	local sequence_count nb_sequences_to_delete
 
 	if [ ! -d ARCHIVE/$folder ]; then 
 		return
@@ -198,38 +200,39 @@ touch_server_is_up() {
     local ipServer="$2"
     local sshPort="$3"
     local remoteDir="$4"
+	local yocto next_wakeup_timestamp yocto_offset retcode msg_txt utc_offset
+
+    # If Yocto API is installed, write next scheduled wakeup time
+    if [[ $(command -v YWakeUpMonitor) && $(command -v YRealTimeClock) ]]; then
+        yocto=$(parse_config "yocto_prefix2" config_static.ini)
+        if [[ -z "$yocto" ]]; then
+            yocto=$(parse_config "yocto_prefix3" config_static.ini)
+        fi
+
+        next_wakeup_timestamp=$(YWakeUpMonitor -f '[result]' -r 127.0.0.1 "$yocto" get_nextWakeUp | sed -e 's/[[:space:]].*//')
+        yocto_offset=$(YRealTimeClock -f '[result]' -r 127.0.0.1 "$yocto" get_utcOffset)
+        retcode=$?
+
+        if [[ $retcode -ne 0 ]]; then
+            msg_txt="Yocto '$yocto' is not accessible!"
+            echo "[ERROR]  $msg_txt"
+        elif [[ "$next_wakeup_timestamp" = 0 ]]; then
+            msg_txt="Yocto scheduled wakeup is disabled!"
+        else
+            if [[ "$yocto_offset" = 0 ]]; then
+                utc_offset=""
+            else
+                utc_offset=$(printf "%+d" $((yocto_offset / 3600)))
+            fi
+
+            msg_txt="Next Yocto wakeup is scheduled on $(date -d "@$next_wakeup_timestamp" '+%Y/%m/%d %H:%M:%S') UTC$utc_offset"
+        fi
+    else
+        msg_txt="Yocto API is not installed, can't read next scheduled wakeup"
+    fi
 
     for i in {1..30}; do
         echo "[INFO]  ($server server, attempt #$i) Touching $ipServer:$remoteDir/system_is_up"
-
-        # If Yocto API is installed, write next scheduled wakeup time
-        if [[ $(command -v YWakeUpMonitor) && $(command -v YRealTimeClock) ]]; then
-            yocto=$(parse_config "yocto_prefix2" config_static.ini)
-            if [[ -z "$yocto" ]]; then
-                yocto=$(parse_config "yocto_prefix3" config_static.ini)
-            fi
-
-            next_wakeup_timestamp=$(YWakeUpMonitor -f '[result]' -r 127.0.0.1 "$yocto" get_nextWakeUp | sed -e 's/[[:space:]].*//')
-            yocto_offset=$(YRealTimeClock -f '[result]' -r 127.0.0.1 "$yocto" get_utcOffset)
-            retcode=$?
-
-            if [[ $retcode -ne 0 ]]; then
-                msg_txt="Yocto '$yocto' is not accessible!"
-                echo "[ERROR]  $msg_txt"
-            elif [[ "$next_wakeup_timestamp" = 0 ]]; then
-                msg_txt="Yocto scheduled wakeup is disabled!"
-            else
-                if [[ "$yocto_offset" = 0 ]]; then
-                    utc_offset=""
-                else
-                    utc_offset=$(printf "%+d" $((yocto_offset / 3600)))
-                fi
-
-                msg_txt="Next Yocto wakeup is scheduled on $(date -d "@$next_wakeup_timestamp" '+%Y/%m/%d %H:%M:%S') UTC$utc_offset"
-            fi
-        else
-            msg_txt="Yocto API is not installed, can't read next scheduled wakeup"
-        fi
 
 		ssh -p "$sshPort" -t $ipServer "echo \"$msg_txt\" > $remoteDir/system_is_up" > /dev/null 2>&1
 
@@ -238,7 +241,7 @@ touch_server_is_up() {
             return 0
         fi
 
-        echo "[INFO]  Unsuccessful, sleeping 10s..."
+        echo "[INFO]  ($server server, attempt #$i) Unsuccessful, sleeping 10s..."
         sleep 10
     done
 
@@ -432,11 +435,11 @@ done
 
 
 if $primary_configured; then
-    touch_server_is_up "primary" "$primary_ipServer" "$primary_sshPort" "$primary_remoteDir" 
+    touch_server_is_up "primary" "$primary_ipServer" "$primary_sshPort" "$primary_remoteDir" &
 fi
 
 if $secondary_configured; then
-    touch_server_is_up "secondary" "$secondary_ipServer" "$secondary_sshPort" "$secondary_remoteDir" 
+    touch_server_is_up "secondary" "$secondary_ipServer" "$secondary_sshPort" "$secondary_remoteDir" &
 fi
 set -e
 
@@ -445,12 +448,12 @@ source utils/bidirectional_sync.sh
 
 if $primary_configured; then
 	bidirectional_sync "config_dynamic.ini" \
-		"$primary_ipServer" "$primary_remoteDir/config_dynamic.ini.$USER" "$primary_sshPort"
+		"$primary_ipServer" "$primary_remoteDir/config_dynamic.ini.$USER" "$primary_sshPort" "primary"
 fi
 
 if $secondary_configured; then
 	bidirectional_sync "config_dynamic.ini" \
-		"$secondary_ipServer" "$secondary_remoteDir/config_dynamic.ini.$USER" "$secondary_sshPort"
+		"$secondary_ipServer" "$secondary_remoteDir/config_dynamic.ini.$USER" "$secondary_sshPort" "secondary"
 fi
 
 
@@ -476,12 +479,18 @@ elif $primary_configured; then
     sync_data "primary" "$primary_sshPort" "$primary_ipServer" "$primary_remoteDir" "."
     sync_logs "primary" "$primary_sshPort" "$primary_ipServer" "$primary_remoteDir" "."
     sync_other "primary" "$primary_sshPort" "$primary_ipServer" "$primary_remoteDir" "."
+
+	echo "[INFO]  Secondary server is not configured"
 elif $secondary_configured; then
+	echo "[INFO]  Primary server is not configured"
+
     sync_data "secondary" "$secondary_sshPort" "$secondary_ipServer" "$secondary_remoteDir" "."
     sync_logs "secondary" "$secondary_sshPort" "$secondary_ipServer" "$secondary_remoteDir" "."
     sync_other "secondary" "$secondary_sshPort" "$secondary_ipServer" "$secondary_remoteDir" "."
 else
     echo "[WARNING]  No upload server is configured."
+	echo "[WARNING]  Skipping ARCHIVE cleanup!"
+	exit 1
 fi
 
 ## Clean up ARCHIVE
