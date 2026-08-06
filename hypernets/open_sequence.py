@@ -177,7 +177,7 @@ def run_sequence_file(sequence_file, instrument_port, instrument_br, # noqa C901
         try:
             context = Context()
             device = Devices.from_device_file(context, instrument_port)
-            info(f"USB-RS85 board: {device.get('ID_SERIAL')}")
+            info(f"USB-RS485 board: {device.get('ID_SERIAL')}")
 
         except Exception as e:
             error(f"{e}")
