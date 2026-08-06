@@ -448,12 +448,12 @@ source utils/bidirectional_sync.sh
 
 if $primary_configured; then
 	bidirectional_sync "config_dynamic.ini" \
-		"$primary_ipServer" "$primary_remoteDir/config_dynamic.ini.$USER" "$primary_sshPort" "primary" &
+		"$primary_ipServer" "$primary_remoteDir/config_dynamic.ini.$USER" "$primary_sshPort" "primary"
 fi
 
 if $secondary_configured; then
 	bidirectional_sync "config_dynamic.ini" \
-		"$secondary_ipServer" "$secondary_remoteDir/config_dynamic.ini.$USER" "$secondary_sshPort" "secondary" &
+		"$secondary_ipServer" "$secondary_remoteDir/config_dynamic.ini.$USER" "$secondary_sshPort" "secondary"
 fi
 
 
