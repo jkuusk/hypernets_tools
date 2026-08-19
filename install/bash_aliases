@@ -1772,8 +1772,8 @@ hypypic()(
 	mkdir -p "$OUTPUT_DIR"
 	cap_file="$OUTPUT_DIR/$(date -u '+%Y%m%dT%H%M%S').jpg"
 
-    set +e
-    set pipefail
+	set +e
+	set pipefail
 	cap_out=$(python -m  hypernets.hypstar.handler -p -b 3000000 -l INFO -d INFO -o "$cap_file" 2>&1 | tee /dev/fd/2)
 	cap_retcode=$?
 
@@ -1791,9 +1791,6 @@ hypypic()(
 		source utils/configparser.sh
 		load_data_server_config primary primary_ipServer primary_sshPort primary_remoteDir primary_configured
 		load_data_server_config secondary secondary_ipServer secondary_sshPort secondary_remoteDir secondary_configured
-
-		set +e
-		cap_file=$(sed -e "s%$HYPERNETS_TOOLS%%;s%^/%%" <<< "$imgname")
 
 		if $primary_configured; then
 		    rsync -e "ssh -p $primary_sshPort" -t --relative "$saved_to" "$primary_ipServer:$primary_remoteDir"

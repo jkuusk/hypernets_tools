@@ -28,7 +28,21 @@ function print_logo(){
 
 function check_sudo_user(){
 	if [[ $EUID -ne 0 ]]; then
-		echo "${XHL}This script must be run as root, use sudo $0 instead${RESET_HL}"
+		echo
+		echo "${XHL}This script must be run as root"
+		echo "Use : sudo ./install/${0##*/} instead${RESET_HL}"
+		echo
+		exit 1
+	fi
+}
+
+
+function check_ht_folder(){
+	if [[ ${PWD##*/} != "hypernets_tools"* ]]; then
+		echo
+		echo "${XHL}This script must be run from hypernets_tools folder" 1>&2
+		echo "Use : sudo ./install/${0##*/} instead${RESET_HL}"
+		echo
 		exit 1
 	fi
 }
@@ -442,6 +456,7 @@ done
 }
 
 # TODO: error handler
-print_logo
 check_sudo_user
+check_ht_folder
+print_logo
 main_menu

@@ -1,3 +1,8 @@
+Version 3.4.2: (2026-08-19)
+	- warn if install wizard is not run from hypernets_tools folder
+	- hypypic bugfix
+	- config file bidirectional sync bugfix
+
 Version 3.4.1: (2026-08-06)
 	- modem diagnostics script bugfixes
 	- inaccessible secondary server blocks upload to primary server

@@ -28,7 +28,8 @@ bidirectional_sync(){
 	echo "[INFO]  ($server server)        <->  $localPath"
 
 	set +e  # Temporary allow error in script
-	local remoteDate=$(ssh -p "$sshPort" -T "$remoteAccess" \
+	local remoteDate
+	remoteDate=$(ssh -p "$sshPort" -T "$remoteAccess" \
 		"stat -c %y $remotePath 2> /dev/null")
 
 	local retcode="$?"
@@ -42,7 +43,8 @@ bidirectional_sync(){
 		return -1
 	fi
 
-	local localDate=$(stat -c %y "$localPath" 2> /dev/null)
+	local localDate
+	localDate=$(stat -c %y "$localPath" 2> /dev/null)
 	if [[ "$?" -eq 1 ]]; then
 		echo "[INFO]  ($server server) $0 : Local file does not exist, downloading now"
 		scp -p -P "$sshPort" "$remoteAccess:$remotePath" "$localPath"
