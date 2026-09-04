@@ -66,17 +66,16 @@ def add_checksum(data):
     return data
 
 
-def one_turn_pan(ser):
-    data = bytearray([0xFF, 0x01, 0x00, 0x04, 0x01, 0x00])  # XXX: CF doc pelco
-    info(f"Query one turn pan : {stringifyBinaryToHex(data)}")
-    send_trame(data, ser)
-
-
 def send_trame(data, ser):
     data = add_checksum(data)
     ser.flush()
+
+    # make sure there is at least 5 ms between commands
+    # 2400 bps speed is so slow and pan-tilt data volume so small that it is ok to just wait 
+    # for 5 ms before sending each command
+    sleep(5e-3)
+
     ser.write(data)
-    # TODO : Make return
 
 
 def check_trame(data):
@@ -133,8 +132,12 @@ def query_position(ser):
 
 def print_position(ser):
 
-    if ser is None:
-        ser = open_serial()
+    try:
+        if ser is None:
+            ser = open_serial()
+    except Exception as e:
+        error(f"Failed to open serial port: {e}.")
+        return
 
     position = query_position(ser)
     if position is not None:
@@ -146,8 +149,12 @@ def print_position(ser):
 
 def move_to(ser, pan=None, tilt=None, wait=False, tilt_limiter=True):
 
-    if ser is None:
-        ser = open_serial()
+    try:
+        if ser is None:
+            ser = open_serial()
+    except Exception as e:
+        error(f"Failed to open serial port: {e}.")
+        return
 
     if pan is None and tilt is None:
         return
@@ -361,9 +368,14 @@ if __name__ == '__main__':
 
     except Exception as e:
         error(f"Config Error: {e}.")
+        exit(1)
 
-    # FIXME
-    ser = open_serial()
+    try:
+        ser = open_serial()
+
+    except Exception as e:
+        error(f"Failed to open serial port: {e}.")
+        exit(1)
 
     if args.get:
         print_position(ser)

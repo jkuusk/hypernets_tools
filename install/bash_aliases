@@ -598,7 +598,15 @@ EOF
 
 	## read absolute position
 	set +e
-	current_abs_pos=$(python -m hypernets.geometry.pan_tilt -g 2>&1 | grep "Absolute positions: " | grep -Eo '[0-9]+([.][0-9]+)?' | paste -s) # pan	tilt
+	tmp="$(python -m hypernets.geometry.pan_tilt -g 2>&1)"
+	rc=$?   
+	        
+	if [ $rc -ne 0 ]; then
+		echo -e "${XHL}Failed to read current position from pan-tilt!\n$tmp${RESET_HL}"
+		exit -1
+	fi
+	        
+	current_abs_pos="$(echo "$tmp" | grep "Absolute positions: " | grep -Eo '[0-9]+([.][0-9]+)?' | paste -s)" # pan tilt
 	set -e
 
 	if [[ "$current_abs_pos" == "" ]]; then

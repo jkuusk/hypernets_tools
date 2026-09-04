@@ -1,3 +1,7 @@
+Version 3.4.3: (2026-09-04)
+	- pt command warns if no permissions to access port
+	- add 5 ms delay before sending command to pan-tilt
+
 Version 3.4.2: (2026-08-19)
 	- warn if install wizard is not run from hypernets_tools folder
 	- hypypic bugfix
